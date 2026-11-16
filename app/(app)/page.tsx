@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useData, useTxMonths } from "@/components/DataProvider";
 import { Badge, Card, Empty, PageHeader, Section, Stat, cx } from "@/components/ui";
 import { buildAlerts } from "@/lib/alerts";
-import { daysBetween, fdate, fmonth, monthKey } from "@/lib/dates";
+import { daysBetween, fdate, fmonth, fshort, monthKey } from "@/lib/dates";
 import { abonadoDesdeCorte, latestStatement } from "@/lib/finance";
 import { loanSummary } from "@/lib/loan";
 import { mxn } from "@/lib/money";
@@ -36,6 +36,15 @@ export default function Resumen() {
   const porCat = Object.entries(
     lista.filter((t) => t.tipo === "gasto").reduce<Record<string, number>>((a, t) => ((a[t.categoria] = (a[t.categoria] ?? 0) + t.monto), a), {}),
   ).sort((a, b) => b[1] - a[1]);
+
+  const dias = Object.entries(
+    lista.reduce<Record<string, { ing: number; gas: number }>>((a, t) => {
+      const d = (a[t.fecha] ??= { ing: 0, gas: 0 });
+      if (t.tipo === "ingreso") d.ing += t.monto;
+      else d.gas += t.monto;
+      return a;
+    }, {}),
+  ).sort((a, b) => b[0].localeCompare(a[0]));
 
   const vacio = !db.cards.length && !db.loans.length;
 
@@ -112,6 +121,28 @@ export default function Resumen() {
               <div className="mt-0.5 text-xs text-muted">Deuda inicial {mxn(planRes.deudaInicial)} · último MSI {planRes.ultimoVencimientoMSI ? fdate(planRes.ultimoVencimientoMSI) : "—"}</div>
             </Card>
           </Link>
+        </Section>
+      )}
+
+      {dias.length > 0 && (
+        <Section title={`Movimientos por día · ${fmonth(mes)}`} actions={<Link href="/movimientos" className="text-xs font-medium text-accent underline">Ver detalle</Link>}>
+          <Card className="p-0 sm:p-0">
+            <ul className="divide-y divide-border/60">
+              {dias.map(([fecha, d]) => (
+                <li key={fecha} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                  <span className="capitalize">{fshort(fecha)}</span>
+                  <span className="num flex gap-3">
+                    {d.ing > 0 && <span className="text-ok">+{mxn(d.ing)}</span>}
+                    {d.gas > 0 && <span>−{mxn(d.gas)}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center justify-between gap-3 border-t border-border bg-surface-2 px-4 py-3 text-sm font-semibold">
+              <span>Total del mes</span>
+              <span className="num">{mxn(ing - gas)} <span className="font-normal text-muted">(+{mxn(ing)} / −{mxn(gas)})</span></span>
+            </div>
+          </Card>
         </Section>
       )}
 

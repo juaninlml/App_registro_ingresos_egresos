@@ -146,3 +146,10 @@ export function useTxMonths(months: string[]) {
   }, [key]);
   return data?.key === key ? data.map : null;
 }
+
+/** Borra un movimiento de su mes (lee la lista, quita el movimiento y la vuelve a guardar). */
+export async function removeTransaction(fecha: string, id: string): Promise<void> {
+  const month = fecha.slice(0, 7);
+  const list = (await (await api(`/api/data/tx:${month}`)).json()) as Transaction[];
+  await api(`/api/data/tx:${month}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(list.filter((t) => t.id !== id)) });
+}

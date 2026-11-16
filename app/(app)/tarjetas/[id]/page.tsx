@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
-import { useData } from "@/components/DataProvider";
+import { removeTransaction, useData } from "@/components/DataProvider";
+import { ImportStatement } from "@/components/ImportStatement";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, TableWrap, td, th } from "@/components/ui";
 import { addDays, addMonths, daysBetween, fdate, fshort, isISO, nextBusinessDay } from "@/lib/dates";
 import { abonadoDesdeCorte, latestStatement, msiInfo, primerCorteSugerido } from "@/lib/finance";
@@ -14,7 +15,7 @@ export default function TarjetaDetalle() {
   const router = useRouter();
   const { db, save, today } = useData();
   const card = db.cards.find((c) => c.id === id);
-  const [modal, setModal] = useState<null | "estado" | "abono" | "msi" | "editar">(null);
+  const [modal, setModal] = useState<null | "estado" | "abono" | "msi" | "editar" | "pdf">(null);
   const [editMsi, setEditMsi] = useState<Msi | null>(null);
 
   if (!card) {
@@ -81,7 +82,8 @@ export default function TarjetaDetalle() {
       )}
 
       <div className="mb-6 flex flex-wrap gap-2">
-        <Btn onClick={() => setModal("estado")}>+ Registrar estado de cuenta</Btn>
+        <Btn variant="primary" onClick={() => setModal("pdf")}>Subir estado de cuenta (PDF)</Btn>
+        <Btn onClick={() => setModal("estado")}>Registrar a mano</Btn>
         <Link href="/plan"><Btn>Ver plan de abonos</Btn></Link>
         <Link href="/msi"><Btn>Proyección por corte</Btn></Link>
       </div>
@@ -129,8 +131,12 @@ export default function TarjetaDetalle() {
                 <tr key={p.id}>
                   <td className={td}>{fdate(p.fecha)}</td>
                   <td className={td}>{mxn(p.monto)}</td>
-                  <td className={`${td} text-muted`}>{p.nota ?? ""}</td>
-                  <td className={td}><Btn small variant="ghost" onClick={() => confirm("¿Borrar este abono?") && save("payments", db.payments.filter((x) => x.id !== p.id))}>Borrar</Btn></td>
+                  <td className={`${td} text-muted`}>{p.nota ?? ""} {p.txId && <Badge tone="accent">desde movimientos</Badge>}</td>
+                  <td className={td}><Btn small variant="ghost" onClick={async () => {
+                    if (!confirm(p.txId ? "¿Borrar este abono? También se quitará el movimiento de pago." : "¿Borrar este abono?")) return;
+                    if (p.txId) await removeTransaction(p.fecha, p.txId).catch(() => {});
+                    await save("payments", db.payments.filter((x) => x.id !== p.id));
+                  }}>Borrar</Btn></td>
                 </tr>
               ))}
             </tbody>
@@ -162,6 +168,7 @@ export default function TarjetaDetalle() {
 
       <div className="mt-8"><Btn variant="danger" onClick={borrarTarjeta}>Borrar tarjeta</Btn></div>
 
+      <ImportStatement card={card} open={modal === "pdf"} onClose={() => setModal(null)} />
       <EstadoModal open={modal === "estado"} onClose={() => setModal(null)} onSave={async (s) => {
         const rest = card.statements.filter((x) => x.fechaCorte !== s.fechaCorte);
         if (await saveCard({ statements: [...rest, s] })) setModal(null);

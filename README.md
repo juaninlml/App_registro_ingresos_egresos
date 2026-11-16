@@ -3,6 +3,8 @@
 App personal (Next.js + React + Neon Postgres) para llevar:
 
 - **Tarjetas** (Santander y otros bancos): estados de cuenta, fechas límite, abonos y cargos a **meses sin intereses**.
+- **Subir estado de cuenta en PDF**: se lee en tu propio navegador con OCR (sin enviar nada a servicios externos); revisas y confirmas antes de guardar. Pensado para estados de cuenta de Santander.
+- **Pagos de tarjeta desde Movimientos**: la categoría «Pago de tarjeta» registra también el abono en la tarjeta elegida.
 - **Proyección por corte** de lo que debes pagar antes de cada fecha límite.
 - **Plan de abonos semanales** (cada lunes) con fecha estimada de liquidación.
 - **Créditos personales** con tabla de amortización.

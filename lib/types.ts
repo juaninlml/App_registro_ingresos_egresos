@@ -55,7 +55,11 @@ export interface Payment {
   destino: "card" | "loan";
   targetId: string;
   nota?: string;
+  txId?: string; // si nació de un movimiento de la categoría "Pago de tarjeta"
 }
+
+/** Categoría especial: crea también el abono a la tarjeta elegida. */
+export const PAGO_TARJETA = "Pago de tarjeta";
 
 export interface Transaction {
   id: string;
@@ -64,7 +68,8 @@ export interface Transaction {
   monto: number;
   categoria: string;
   nota?: string;
-  metodo?: string; // "efectivo/débito" o id de tarjeta
+  metodo?: string; // "efectivo/débito" o id de tarjeta con la que se pagó
+  tarjetaId?: string; // en la categoría "Pago de tarjeta": la tarjeta que se paga
 }
 
 export interface PlanConfig {
@@ -101,6 +106,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "Suscripciones",
     "Servicios",
     "Salud",
+    "Pago de tarjeta",
     "Otros",
   ],
   categoriasIngreso: ["Sueldo", "Freelance", "Otros"],
