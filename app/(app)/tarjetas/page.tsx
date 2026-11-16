@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ImportStatement } from "@/components/ImportStatement";
 import { useState } from "react";
 import { useData } from "@/components/DataProvider";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader } from "@/components/ui";
@@ -10,7 +12,9 @@ import type { Card as CardT } from "@/lib/types";
 
 export default function Tarjetas() {
   const { db, save, today } = useData();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [pdf, setPdf] = useState(false);
   const [f, setF] = useState({ banco: "", nombre: "", terminacion: "", limite: "" as number | "", diaCorte: "" as number | "" });
 
   async function crear(e: React.FormEvent) {
@@ -32,9 +36,9 @@ export default function Tarjetas() {
 
   return (
     <>
-      <PageHeader title="Tarjetas" sub="Santander y otros bancos funcionan igual" actions={<Btn variant="primary" onClick={() => setOpen(true)}>+ Nueva tarjeta</Btn>} />
+      <PageHeader title="Tarjetas" sub="Santander y otros bancos funcionan igual" actions={<><Btn variant="primary" onClick={() => setPdf(true)}>Crear desde estado de cuenta (PDF)</Btn><Btn onClick={() => setOpen(true)}>+ Nueva tarjeta</Btn></>} />
       {!db.cards.length ? (
-        <Empty>Agrega una tarjeta para registrar estados de cuenta, meses sin intereses y abonos.</Empty>
+        <Empty>Sube el PDF de tu estado de cuenta para crear la tarjeta con sus meses sin intereses, o agrégala a mano con «Nueva tarjeta».</Empty>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {db.cards.map((c) => {
@@ -68,6 +72,7 @@ export default function Tarjetas() {
         </div>
       )}
 
+      <ImportStatement card={null} open={pdf} onClose={() => setPdf(false)} onCreated={(id) => router.push(`/tarjetas/${id}`)} />
       <Modal open={open} onClose={() => setOpen(false)} title="Nueva tarjeta">
         <form onSubmit={crear} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">

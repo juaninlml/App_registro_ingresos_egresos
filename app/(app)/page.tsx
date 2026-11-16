@@ -54,8 +54,8 @@ export default function Resumen() {
 
       {vacio && (
         <Empty>
-          Aún no hay datos. Importa tu respaldo en <Link href="/ajustes" className="font-medium text-accent underline">Ajustes</Link> o agrega tu primera{" "}
-          <Link href="/tarjetas" className="font-medium text-accent underline">tarjeta</Link>.
+          Aún no hay datos. Importa tu respaldo en <Link href="/ajustes" className="font-medium text-accent underline">Ajustes</Link> o crea tu primera{" "}
+          <Link href="/tarjetas" className="font-medium text-accent underline">tarjeta subiendo el PDF de tu estado de cuenta</Link>.
         </Empty>
       )}
 

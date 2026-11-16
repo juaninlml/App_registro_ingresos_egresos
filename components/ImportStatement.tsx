@@ -23,7 +23,8 @@ interface Row {
 
 const close = (a: number, b: number) => Math.abs(a - b) < 0.015;
 
-export function ImportStatement({ card, open, onClose }: { card: Card; open: boolean; onClose: () => void }) {
+/** Sin `card`, crea una tarjeta nueva a partir del estado de cuenta. */
+export function ImportStatement({ card, open, onClose, onCreated }: { card: Card | null; open: boolean; onClose: () => void; onCreated?: (id: string) => void }) {
   const { db, save } = useData();
   const input = useRef<HTMLInputElement>(null);
   const [fase, setFase] = useState<"elegir" | "leyendo" | "revisar">("elegir");
@@ -33,6 +34,7 @@ export function ImportStatement({ card, open, onClose }: { card: Card; open: boo
   const [f, setF] = useState({ corte: "", limite: "", total: "" as number | "", pago: "" as number | "", minimo: "" as number | "", limiteCredito: "" as number | "" });
   const [rows, setRows] = useState<Row[]>([]);
   const [guardando, setGuardando] = useState(false);
+  const [nc, setNc] = useState({ banco: "", nombre: "", terminacion: "" });
 
   function reset() {
     setFase("elegir");
@@ -53,7 +55,8 @@ export function ImportStatement({ card, open, onClose }: { card: Card; open: boo
       const parsed = await readStatementPdf(file, setEstado);
       setP(parsed);
       setF({ corte: parsed.fechaCorte, limite: parsed.fechaLimite, total: parsed.saldoTotal, pago: parsed.pagoNoIntereses, minimo: parsed.pagoMinimo ?? "", limiteCredito: parsed.limiteCredito ?? "" });
-      const mine = db.msi.filter((m) => m.cardId === card.id);
+      if (!card) setNc({ banco: parsed.banco ?? "", nombre: parsed.nombreTarjeta ?? "", terminacion: "" });
+      const mine = card ? db.msi.filter((m) => m.cardId === card.id) : [];
       setRows(
         parsed.msi.map((m, i) => {
           const ex = mine.find((x) => x.fechaOperacion === m.fechaOperacion && close(x.montoOriginal, m.montoOriginal));
@@ -85,16 +88,32 @@ export function ImportStatement({ card, open, onClose }: { card: Card; open: boo
     setGuardando(true);
     setErr(null);
     const statement = { fechaCorte: f.corte, fechaLimite: f.limite, saldoTotal: Number(f.total), pagoNoIntereses: Number(f.pago), pagoMinimo: f.minimo === "" ? undefined : Number(f.minimo) };
-    const nuevaCard: Card = {
-      ...card,
-      limite: f.limiteCredito === "" ? card.limite : Number(f.limiteCredito),
-      statements: [...card.statements.filter((s) => s.fechaCorte !== f.corte), statement],
-    };
+    if (!card && (!nc.banco.trim() || !nc.nombre.trim())) {
+      setErr("Escribe el banco y el nombre de la tarjeta.");
+      setGuardando(false);
+      return;
+    }
+    const cardId = card?.id ?? uid();
+    const nuevaCard: Card = card
+      ? {
+          ...card,
+          limite: f.limiteCredito === "" ? card.limite : Number(f.limiteCredito),
+          statements: [...card.statements.filter((s) => s.fechaCorte !== f.corte), statement],
+        }
+      : {
+          id: cardId,
+          banco: nc.banco.trim(),
+          nombre: nc.nombre.trim(),
+          terminacion: nc.terminacion.trim() || undefined,
+          limite: f.limiteCredito === "" ? undefined : Number(f.limiteCredito),
+          diaCorte: Number(f.corte.slice(8, 10)),
+          statements: [statement],
+        };
     let msi = [...db.msi];
     for (const r of rows.filter((x) => x.incluir)) {
       if (r.montoOriginal === "" || r.pagoMensual === "" || r.pagoActual === "" || r.totalPagos === "") continue;
       const m: Omit<Msi, "id"> = {
-        cardId: card.id,
+        cardId,
         descripcion: r.descripcion.trim() || "Cargo a meses",
         fechaOperacion: r.fechaOperacion,
         montoOriginal: Number(r.montoOriginal),
@@ -106,10 +125,13 @@ export function ImportStatement({ card, open, onClose }: { card: Card; open: boo
       if (r.existenteId) msi = msi.map((x) => (x.id === r.existenteId ? { ...m, id: x.id } : x));
       else msi.push({ ...m, id: uid() });
     }
-    const ok1 = await save("cards", db.cards.map((c) => (c.id === card.id ? nuevaCard : c)));
+    const ok1 = await save("cards", card ? db.cards.map((c) => (c.id === card.id ? nuevaCard : c)) : [...db.cards, nuevaCard]);
     const ok2 = ok1 && (await save("msi", msi));
     setGuardando(false);
-    if (ok1 && ok2) cerrar();
+    if (ok1 && ok2) {
+      cerrar();
+      if (!card) onCreated?.(cardId);
+    }
     else setErr("No se pudo guardar. Revisa tu conexión e intenta de nuevo.");
   }
 
@@ -117,7 +139,7 @@ export function ImportStatement({ card, open, onClose }: { card: Card; open: boo
   const actualiza = rows.filter((r) => r.incluir && r.existenteId).length;
 
   return (
-    <Modal open={open} onClose={cerrar} title="Subir estado de cuenta (PDF)">
+    <Modal open={open} onClose={cerrar} title={card ? "Subir estado de cuenta (PDF)" : "Crear tarjeta desde estado de cuenta (PDF)"}>
       {fase === "elegir" && (
         <div className="space-y-3">
           <p className="text-sm text-muted">
@@ -140,6 +162,18 @@ export function ImportStatement({ card, open, onClose }: { card: Card; open: boo
               {p.advertencias.map((a, i) => <li key={i}>{a}</li>)}
             </ul>
           )}
+          {!card && (
+            <div>
+              <h4 className="mb-2 text-sm font-semibold">Datos de la tarjeta nueva</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Banco"><Input value={nc.banco} onChange={(e) => setNc({ ...nc, banco: e.target.value })} maxLength={40} placeholder="Santander" /></Field>
+                <Field label="Nombre"><Input value={nc.nombre} onChange={(e) => setNc({ ...nc, nombre: e.target.value })} maxLength={40} placeholder="Unique" /></Field>
+                <Field label="Últimos 4 dígitos (opcional)"><Input value={nc.terminacion} onChange={(e) => setNc({ ...nc, terminacion: e.target.value.replace(/\D/g, "").slice(0, 4) })} inputMode="numeric" /></Field>
+                <Field label="Día de corte"><Input value={f.corte ? String(Number(f.corte.slice(8, 10))) : ""} readOnly /></Field>
+              </div>
+            </div>
+          )}
+
           <div>
             <h4 className="mb-2 text-sm font-semibold">Estado de cuenta</h4>
             <div className="grid grid-cols-2 gap-3">
@@ -150,7 +184,7 @@ export function ImportStatement({ card, open, onClose }: { card: Card; open: boo
               <Field label="Pago mínimo"><NumInput value={f.minimo} onChange={(n) => setF({ ...f, minimo: n })} /></Field>
               <Field label="Límite de crédito"><NumInput value={f.limiteCredito} onChange={(n) => setF({ ...f, limiteCredito: n })} /></Field>
             </div>
-            {card.statements.some((s) => s.fechaCorte === f.corte) && <p className="mt-2 text-xs text-warn">Ya existe un estado con ese corte; se reemplazará.</p>}
+            {card?.statements.some((s) => s.fechaCorte === f.corte) && <p className="mt-2 text-xs text-warn">Ya existe un estado con ese corte; se reemplazará.</p>}
           </div>
 
           <div>
@@ -181,7 +215,7 @@ export function ImportStatement({ card, open, onClose }: { card: Card; open: boo
           <div className="flex gap-2">
             <Btn onClick={reset} className="flex-1">Elegir otro PDF</Btn>
             <Btn variant="primary" onClick={guardar} disabled={guardando || f.total === "" || f.pago === ""} className="flex-1">
-              {guardando ? "Guardando…" : `Guardar (${nuevos} nuevos${actualiza ? `, ${actualiza} a actualizar` : ""})`}
+              {guardando ? "Guardando…" : `${card ? "Guardar" : "Crear tarjeta"} (${nuevos} nuevos${actualiza ? `, ${actualiza} a actualizar` : ""})`}
             </Btn>
           </div>
           <p className="text-center text-xs text-muted">Resumen: {mxn(Number(f.pago) || 0)} para no generar intereses.</p>
