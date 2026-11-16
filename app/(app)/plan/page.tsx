@@ -3,9 +3,10 @@ import { useState } from "react";
 import { useData } from "@/components/DataProvider";
 import { Badge, Btn, Card, Empty, Field, Input, NumInput, PageHeader, Section, Select, Stat, TableWrap, td, th } from "@/components/ui";
 import { fdate, fshort, weekday } from "@/lib/dates";
-import { latestStatement } from "@/lib/finance";
-import { mxn, uid } from "@/lib/money";
-import { buildPlan, defaultPlan } from "@/lib/plan";
+import { deudaActual, latestStatement } from "@/lib/finance";
+import Link from "next/link";
+import { mxn } from "@/lib/money";
+import { buildPlan, conAbono, defaultPlan, proximoLunes, sugerencias } from "@/lib/plan";
 import type { PlanConfig } from "@/lib/types";
 
 export default function Plan() {
@@ -14,7 +15,7 @@ export default function Plan() {
   const card = db.cards.find((c) => c.id === (sel || db.plan?.cardId)) ?? db.cards[0];
   const [nuevoSem, setNuevoSem] = useState({ desde: "", monto: "" as number | "" });
   const [nuevoExtra, setNuevoExtra] = useState({ fecha: "", monto: "" as number | "", nota: "" });
-  const [abono, setAbono] = useState<number | "">("");
+  const [custom, setCustom] = useState<number | "">("");
 
   if (!card) return <><PageHeader title="Plan de abonos" /><Empty>Primero agrega una tarjeta.</Empty></>;
   if (!latestStatement(card)) return <><PageHeader title="Plan de abonos" /><Empty>Registra un estado de cuenta de {card.nombre} para armar el plan.</Empty></>;
@@ -23,6 +24,12 @@ export default function Plan() {
   const res = buildPlan(plan, card, db.msi, db.payments, today);
   const guardado = db.plan?.cardId === card.id;
   const setPlan = (p: PlanConfig) => save("plan", p);
+  const st = latestStatement(card)!;
+  const deuda = deudaActual(card, db.payments, st);
+  const sug = sugerencias(plan, card, db.msi, db.payments, today, deuda);
+  const sim = custom === "" || Number(custom) <= 0 ? null : buildPlan(conAbono(plan, Number(custom), today), card, db.msi, db.payments, today);
+  const simPend = sim ? sim.weeks.filter((w) => w.domingo >= today && w.pendiente > 0.005) : [];
+  const aplicar = (m: number) => setPlan(conAbono(plan, m, today));
   const semActual = res.weeks.find((w) => w.lunes <= today && today <= w.domingo);
 
   return (
@@ -34,11 +41,42 @@ export default function Plan() {
       {!guardado && <Card className="mb-5 border-warn/40 bg-warn-soft text-sm text-warn">Este plan aún no está guardado. Agrega o cambia cualquier valor para guardarlo.</Card>}
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Deuda al último corte" value={mxn(res.deudaInicial)} />
+        <Stat label="Deuda actual" value={mxn(deuda)} sub={`Corte ${fshort(st.fechaCorte)}: ${mxn(res.deudaInicial)} − abonos`} />
         <Stat label="Liquidas el" value={res.liquidacion ? fshort(res.liquidacion.lunes) : "—"} tone={res.liquidacion ? "ok" : "warn"} sub={res.liquidacion ? undefined : "Con este plan aún no alcanza"} />
         <Stat label="Último vencimiento MSI" value={res.ultimoVencimientoMSI ? fshort(res.ultimoVencimientoMSI) : "—"} />
         <Stat label="Esta semana" value={semActual ? mxn(semActual.abono) : "—"} sub={semActual ? `Vence ${mxn(semActual.vence)}` : undefined} />
       </div>
+
+      <Section title="Calculadora de abono semanal">
+        <Card>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-xs font-medium text-muted">Fijo · cubrir cada pago a tiempo</div>
+              <div className="num mt-1 text-xl font-semibold">{sug.minimo !== null ? mxn(sug.minimo) : "—"}<span className="text-sm font-normal text-muted"> / semana</span></div>
+              <div className="mt-0.5 text-xs text-muted">Lo mínimo para llegar a cada fecha límite sin pendiente.</div>
+              {sug.minimo !== null && <Btn small className="mt-2" onClick={() => aplicar(sug.minimo!)}>Usar este</Btn>}
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-xs font-medium text-muted">Fijo · liquidar el total</div>
+              <div className="num mt-1 text-xl font-semibold">{sug.liquidar !== null ? mxn(sug.liquidar) : "—"}<span className="text-sm font-normal text-muted"> / semana</span></div>
+              <div className="mt-0.5 text-xs text-muted">{sug.liquidar !== null ? `Deuda ${mxn(deuda)} en ${sug.semanasLiquidar} semanas, hasta el último MSI.` : "Sin deuda pendiente o sin MSI vigentes."}</div>
+              {sug.liquidar !== null && <Btn small className="mt-2" onClick={() => aplicar(sug.liquidar!)}>Usar este</Btn>}
+            </div>
+          </div>
+          <div className="mt-4 border-t border-border pt-3">
+            <Field label="Personalizado · ¿cuánto abonarías cada semana?" hint={`Aplica desde el lunes ${fdate(proximoLunes(today))}`}>
+              <NumInput value={custom} onChange={setCustom} min={0.01} placeholder="Monto" aria-label="Abono semanal personalizado" />
+            </Field>
+            {sim && (
+              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div><div className="text-xs text-muted">Terminas de pagar</div><div className="font-semibold">{sim.liquidacion ? fdate(sim.liquidacion.lunes) : "No alcanza en el plan"}</div></div>
+                <div><div className="text-xs text-muted">Pagos a tiempo</div>{simPend.length ? <div className="font-semibold text-danger">Faltan {mxn(simPend.reduce((a, w) => a + w.pendiente, 0))} en {simPend.length} sem.</div> : <div className="font-semibold text-ok">Todo cubierto</div>}</div>
+                <Btn variant="primary" className="col-span-2" onClick={() => { aplicar(Number(custom)); setCustom(""); }}>Aplicar al plan</Btn>
+              </div>
+            )}
+          </div>
+        </Card>
+      </Section>
 
       <Section title="Abono semanal (cada lunes)">
         <Card>
@@ -99,16 +137,9 @@ export default function Plan() {
         </Card>
       </Section>
 
-      <Section title="Registrar abono de hoy" >
-        <Card>
-          <form className="flex gap-2" onSubmit={async (e) => {
-            e.preventDefault();
-            if (await save("payments", [...db.payments, { id: uid(), fecha: today, monto: Number(abono), destino: "card", targetId: card.id, nota: "Abono semanal" }])) setAbono("");
-          }}>
-            <div className="flex-1"><NumInput value={abono} onChange={setAbono} min={0.01} placeholder={semActual ? String(semActual.abonoPlan) : "Monto"} required aria-label="Monto del abono" /></div>
-            <Btn variant="primary" type="submit">Registrar</Btn>
-          </form>
-          <p className="mt-2 text-xs text-muted">Las semanas pasadas usan lo que registraste; las futuras usan el plan.</p>
+      <Section title="Registrar un abono">
+        <Card className="text-sm text-muted">
+          Los pagos reales se registran en <Link href="/movimientos" className="font-medium text-accent underline">Movimientos</Link> con la categoría «Pago de tarjeta»: ahí se descuentan de la deuda y de esta tabla. Aquí solo se calcula el plan.
         </Card>
       </Section>
 

@@ -6,7 +6,7 @@ import { removeTransaction, useData } from "@/components/DataProvider";
 import { ImportStatement } from "@/components/ImportStatement";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, TableWrap, td, th } from "@/components/ui";
 import { addDays, addMonths, daysBetween, fdate, fshort, isISO, nextBusinessDay } from "@/lib/dates";
-import { abonadoDesdeCorte, latestStatement, msiInfo, primerCorteSugerido } from "@/lib/finance";
+import { abonadoDesdeCorte, deudaActual, latestStatement, msiInfo, primerCorteSugerido } from "@/lib/finance";
 import { mxn, round2, uid } from "@/lib/money";
 import type { Msi, Payment, Statement } from "@/lib/types";
 
@@ -74,7 +74,7 @@ export default function TarjetaDetalle() {
           <Card>
             <div className="text-xs font-medium text-muted">Falta para el límite</div>
             <div className={`num mt-1 text-xl font-semibold ${falta > 0 ? "text-danger" : "text-ok"}`}>{mxn(falta)}</div>
-            <div className="mt-0.5 text-xs text-muted">Saldo total {mxn(st.saldoTotal)}</div>
+            <div className="mt-0.5 text-xs text-muted">Deuda actual {mxn(deudaActual(card, db.payments, st))} · al corte {mxn(st.saldoTotal)}</div>
           </Card>
         </div>
       ) : (

@@ -122,3 +122,8 @@ export function abonadoDesdeCorte(card: Card, payments: Payment[], st: Statement
       .reduce((s, p) => s + p.monto, 0),
   );
 }
+
+/** Deuda total hoy: saldo del último corte menos lo abonado después del corte. */
+export function deudaActual(card: Card, payments: Payment[], st: Statement): number {
+  return round2(Math.max(0, st.saldoTotal - abonadoDesdeCorte(card, payments, st)));
+}

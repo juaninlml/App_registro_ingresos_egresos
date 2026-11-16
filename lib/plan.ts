@@ -63,7 +63,8 @@ export function buildPlan(plan: PlanConfig, card: Card, msis: Msi[], payments: P
   const reales = payments.filter((p) => p.destino === "card" && p.targetId === card.id);
   const weeks: WeekRow[] = [];
   let remanente = 0;
-  let acumulado = 0;
+  // abonos hechos después del corte pero antes de la primera semana del plan
+  let acumulado = round2(reales.filter((p) => p.fecha > st.fechaCorte && p.fecha < plan.inicio).reduce((a, p) => a + p.monto, 0));
   let liquidacion: WeekRow | null = null;
 
   for (let i = 0; i < nSemanas; i++) {
@@ -105,4 +106,43 @@ export function buildPlan(plan: PlanConfig, card: Card, msis: Msi[], payments: P
     remanenteFinal: remanente,
     deudaInicial: st.saldoTotal,
   };
+}
+
+/** Lunes desde el que aplica un nuevo abono (la semana en curso se respeta tal cual). */
+export function proximoLunes(today: ISODate): ISODate {
+  return mondayOnOrAfter(addDays(today, 1));
+}
+
+/** Plan con un abono semanal fijo a partir del próximo lunes. */
+export function conAbono(plan: PlanConfig, monto: number, today: ISODate): PlanConfig {
+  const desde = proximoLunes(today);
+  return { ...plan, semanal: [...plan.semanal.filter((s) => s.desde < desde), { desde, monto: round2(monto) }] };
+}
+
+export interface Sugerencias {
+  minimo: number | null; // abono semanal mínimo para cubrir cada pago a tiempo
+  liquidar: number | null; // abono semanal para dejar la deuda en 0 al último vencimiento de MSI
+  semanasLiquidar: number;
+}
+
+export function sugerencias(plan: PlanConfig, card: Card, msis: Msi[], payments: Payment[], today: ISODate, deuda: number): Sugerencias {
+  const base = buildPlan(plan, card, msis, payments, today);
+  if (!base.cuts.length) return { minimo: null, liquidar: null, semanasLiquidar: 0 };
+  const futuras = (r: PlanResult) => r.weeks.filter((w) => w.domingo >= today);
+  const sinPendientes = (m: number) => futuras(buildPlan(conAbono(plan, m, today), card, msis, payments, today)).every((w) => w.pendiente <= 0.005);
+  const tope = Math.ceil(base.cuts.reduce((a, c) => a + c.total, 0)) + 1;
+  let minimo: number | null = null;
+  if (sinPendientes(tope)) {
+    let lo = 0, hi = tope;
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (sinPendientes(mid)) hi = mid; else lo = mid;
+    }
+    minimo = hi;
+  }
+  const lunes = proximoLunes(today);
+  const fin = base.ultimoVencimientoMSI;
+  const semanasLiquidar = fin ? base.weeks.filter((w) => w.lunes >= lunes && w.lunes <= fin).length : 0;
+  const liquidar = semanasLiquidar > 0 && deuda > 0 ? Math.ceil(deuda / semanasLiquidar) : null;
+  return { minimo, liquidar, semanasLiquidar };
 }
