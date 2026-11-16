@@ -1,13 +1,14 @@
 "use client";
 import { useState } from "react";
+import { CardVisual } from "@/components/CardVisual";
 import { useData } from "@/components/DataProvider";
-import { Badge, Btn, Card, Empty, Field, Input, NumInput, PageHeader, Section, Select, Stat, TableWrap, td, th } from "@/components/ui";
+import { Badge, Btn, Card, Empty, Field, Input, NumInput, PageHeader, Section, Stat, TableWrap, cx, td, th } from "@/components/ui";
 import { fdate, fshort, weekday } from "@/lib/dates";
 import { deudaActual, latestStatement } from "@/lib/finance";
 import Link from "next/link";
 import { mxn } from "@/lib/money";
 import { buildPlan, conAbono, defaultPlan, proximoLunes, sugerencias } from "@/lib/plan";
-import type { PlanConfig } from "@/lib/types";
+import type { Card as CardT, PlanConfig } from "@/lib/types";
 
 export default function Plan() {
   const { db, save, today } = useData();
@@ -18,7 +19,16 @@ export default function Plan() {
   const [custom, setCustom] = useState<number | "">("");
 
   if (!card) return <><PageHeader title="Plan de abonos" /><Empty>Primero agrega una tarjeta.</Empty></>;
-  if (!latestStatement(card)) return <><PageHeader title="Plan de abonos" /><Empty>Registra un estado de cuenta de {card.nombre} para armar el plan.</Empty></>;
+  const selector = <SelectorTarjeta cards={db.cards} actual={card.id} conPlan={db.plan?.cardId} onSelect={setSel} />;
+  if (!latestStatement(card)) {
+    return (
+      <>
+        <PageHeader title="Plan de abonos" sub="Un abono por semana para liquidar la tarjeta" />
+        {selector}
+        <Empty>Registra un estado de cuenta de {card.banco} {card.nombre} para armar el plan.</Empty>
+      </>
+    );
+  }
 
   const plan: PlanConfig = db.plan && db.plan.cardId === card.id ? db.plan : defaultPlan(card);
   const res = buildPlan(plan, card, db.msi, db.payments, today);
@@ -34,9 +44,8 @@ export default function Plan() {
 
   return (
     <>
-      <PageHeader title="Plan de abonos" sub="Un abono por semana para liquidar la tarjeta" actions={
-        db.cards.length > 1 ? <Select value={card.id} onChange={(e) => setSel(e.target.value)} className="w-auto">{db.cards.map((c) => <option key={c.id} value={c.id}>{c.banco} {c.nombre}</option>)}</Select> : undefined
-      } />
+      <PageHeader title="Plan de abonos" sub="Un abono por semana para liquidar la tarjeta" />
+      {selector}
 
       {!guardado && <Card className="mb-5 border-warn/40 bg-warn-soft text-sm text-warn">Este plan aún no está guardado. Agrega o cambia cualquier valor para guardarlo.</Card>}
 
@@ -165,5 +174,38 @@ export default function Plan() {
         </TableWrap>
       </Section>
     </>
+  );
+}
+
+/** Tarjetas para elegir de cuál es el plan, con el mismo color y banco que en «Tarjetas». */
+function SelectorTarjeta({ cards, actual, conPlan, onSelect }: { cards: CardT[]; actual: string; conPlan?: string; onSelect: (id: string) => void }) {
+  return (
+    <Section title={cards.length > 1 ? "¿De qué tarjeta es el plan?" : "Tarjeta del plan"}>
+      <div role="radiogroup" aria-label="Tarjeta del plan" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {cards.map((c) => {
+          const on = c.id === actual;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              aria-label={`${c.banco} ${c.nombre}${c.terminacion ? ` terminación ${c.terminacion}` : ""}`}
+              onClick={() => onSelect(c.id)}
+              className={cx(
+                "relative rounded-2xl p-1 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                on ? "ring-2 ring-accent" : "opacity-60 hover:opacity-100",
+              )}
+            >
+              <CardVisual card={c} />
+              <span className="mt-1.5 flex items-center justify-between gap-1 px-1 text-xs">
+                <span className={cx("truncate", on ? "font-semibold" : "text-muted")}>{c.banco} {c.nombre}</span>
+                {conPlan === c.id && <Badge tone="accent">con plan</Badge>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </Section>
   );
 }

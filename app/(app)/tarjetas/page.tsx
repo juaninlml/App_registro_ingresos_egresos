@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { BancoColorFields, CardVisual, type BancoColor } from "@/components/CardVisual";
 import { ImportStatement } from "@/components/ImportStatement";
 import { useState } from "react";
 import { useData } from "@/components/DataProvider";
@@ -15,13 +16,15 @@ export default function Tarjetas() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pdf, setPdf] = useState(false);
-  const [f, setF] = useState({ banco: "", nombre: "", terminacion: "", limite: "" as number | "", diaCorte: "" as number | "" });
+  const vacio = { banco: "", color: "" as BancoColor["color"], nombre: "", terminacion: "", limite: "" as number | "", diaCorte: "" as number | "" };
+  const [f, setF] = useState(vacio);
 
   async function crear(e: React.FormEvent) {
     e.preventDefault();
     const card: CardT = {
       id: uid(),
       banco: f.banco.trim(),
+      color: f.color || undefined,
       nombre: f.nombre.trim(),
       terminacion: f.terminacion.trim() || undefined,
       limite: f.limite === "" ? undefined : f.limite,
@@ -30,7 +33,7 @@ export default function Tarjetas() {
     };
     if (await save("cards", [...db.cards, card])) {
       setOpen(false);
-      setF({ banco: "", nombre: "", terminacion: "", limite: "", diaCorte: "" });
+      setF(vacio);
     }
   }
 
@@ -50,7 +53,8 @@ export default function Tarjetas() {
               <Link key={c.id} href={`/tarjetas/${c.id}`}>
                 <Card className="h-full transition hover:border-accent">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <CardVisual card={c} compact className="w-20 shrink-0" />
+                    <div className="min-w-0 flex-1">
                       <div className="font-semibold">{c.banco} {c.nombre}</div>
                       <div className="text-xs text-muted">{c.terminacion ? `•••• ${c.terminacion} · ` : ""}corte día {c.diaCorte}</div>
                     </div>
@@ -75,8 +79,8 @@ export default function Tarjetas() {
       <ImportStatement card={null} open={pdf} onClose={() => setPdf(false)} onCreated={(id) => router.push(`/tarjetas/${id}`)} />
       <Modal open={open} onClose={() => setOpen(false)} title="Nueva tarjeta">
         <form onSubmit={crear} className="space-y-3">
+          {open && <BancoColorFields value={f} onChange={(v) => setF({ ...f, ...v })} nombre={f.nombre} terminacion={f.terminacion} />}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Banco"><Input value={f.banco} onChange={(e) => setF({ ...f, banco: e.target.value })} placeholder="Santander" required maxLength={40} /></Field>
             <Field label="Nombre"><Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Unique" required maxLength={40} /></Field>
             <Field label="Últimos 4 dígitos"><Input value={f.terminacion} onChange={(e) => setF({ ...f, terminacion: e.target.value.replace(/\D/g, "").slice(0, 4) })} inputMode="numeric" placeholder="1234" /></Field>
             <Field label="Día de corte"><NumInput value={f.diaCorte} onChange={(n) => setF({ ...f, diaCorte: n })} min={1} max={31} required /></Field>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { readTxMonth, useData, type Write } from "@/components/DataProvider";
+import { BancoColorFields, isColorId, type BancoColor } from "@/components/CardVisual";
 import { ImportStatement } from "@/components/ImportStatement";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, TableWrap, td, th } from "@/components/ui";
 import { addDays, addMonths, daysBetween, fdate, fshort, isISO, nextBusinessDay } from "@/lib/dates";
@@ -306,19 +307,19 @@ function MsiForm({ onSave, edit, today, sugerir }: { onSave: (m: Omit<Msi, "id" 
   );
 }
 
-function EditarModal({ open, onClose, card, onSave }: { open: boolean; onClose: () => void; card: { banco: string; nombre: string; terminacion?: string; limite?: number; diaCorte: number; notas?: string }; onSave: (p: Partial<typeof card>) => void }) {
+function EditarModal({ open, onClose, card, onSave }: { open: boolean; onClose: () => void; card: { banco: string; color?: string; nombre: string; terminacion?: string; limite?: number; diaCorte: number; notas?: string }; onSave: (p: Partial<typeof card>) => void }) {
   return (
     <Modal open={open} onClose={onClose} title="Editar tarjeta">
       {open && <EditarForm card={card} onSave={onSave} />}
     </Modal>
   );
 }
-function EditarForm({ card, onSave }: { card: { banco: string; nombre: string; terminacion?: string; limite?: number; diaCorte: number; notas?: string }; onSave: (p: Partial<typeof card>) => void }) {
-  const [f, setF] = useState({ banco: card.banco, nombre: card.nombre, terminacion: card.terminacion ?? "", limite: (card.limite ?? "") as number | "", dia: card.diaCorte as number | "", notas: card.notas ?? "" });
+function EditarForm({ card, onSave }: { card: { banco: string; color?: string; nombre: string; terminacion?: string; limite?: number; diaCorte: number; notas?: string }; onSave: (p: Partial<typeof card>) => void }) {
+  const [f, setF] = useState({ banco: card.banco, color: (isColorId(card.color) ? card.color : "") as BancoColor["color"], nombre: card.nombre, terminacion: card.terminacion ?? "", limite: (card.limite ?? "") as number | "", dia: card.diaCorte as number | "", notas: card.notas ?? "" });
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSave({ banco: f.banco.trim(), nombre: f.nombre.trim(), terminacion: f.terminacion || undefined, limite: f.limite === "" ? undefined : f.limite, diaCorte: Number(f.dia), notas: f.notas.trim() || undefined }); }} className="space-y-3">
+    <form onSubmit={(e) => { e.preventDefault(); onSave({ banco: f.banco.trim(), color: f.color || undefined, nombre: f.nombre.trim(), terminacion: f.terminacion || undefined, limite: f.limite === "" ? undefined : f.limite, diaCorte: Number(f.dia), notas: f.notas.trim() || undefined }); }} className="space-y-3">
+      <BancoColorFields value={f} onChange={(v) => setF({ ...f, ...v })} nombre={f.nombre} terminacion={f.terminacion} />
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Banco"><Input value={f.banco} onChange={(e) => setF({ ...f, banco: e.target.value })} required /></Field>
         <Field label="Nombre"><Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} required /></Field>
         <Field label="Últimos 4 dígitos"><Input value={f.terminacion} onChange={(e) => setF({ ...f, terminacion: e.target.value.replace(/\D/g, "").slice(0, 4) })} inputMode="numeric" /></Field>
         <Field label="Día de corte"><NumInput value={f.dia} onChange={(n) => setF({ ...f, dia: n })} min={1} max={31} required /></Field>

@@ -30,7 +30,7 @@ function shape(o: unknown, s: Shape): boolean {
 }
 
 const STATEMENT: Shape = { fechaCorte: "date", fechaLimite: "date", saldoTotal: "num", pagoNoIntereses: "num", pagoMinimo: "num?" };
-const CARD: Shape = { id: "str", banco: "str", nombre: "str", terminacion: "str?", limite: "num?", diaCorte: "int", notas: "str?" };
+const CARD: Shape = { id: "str", banco: "str", nombre: "str", terminacion: "str?", limite: "num?", diaCorte: "int", notas: "str?", color: "str?" };
 const MSI: Shape = {
   id: "str", cardId: "str", descripcion: "str", fechaOperacion: "date", montoOriginal: "num",
   pagoMensual: "num", totalPagos: "int", primerCorte: "date", terminacionTarjeta: "str?",

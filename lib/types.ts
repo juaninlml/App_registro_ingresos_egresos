@@ -16,6 +16,7 @@ export interface Card {
   terminacion?: string; // últimos 4 dígitos (nunca guardes el número completo)
   limite?: number;
   diaCorte: number;
+  color?: string; // id de color (ver components/CardVisual.tsx); si falta se usa el del banco
   statements: Statement[];
   notas?: string;
 }
