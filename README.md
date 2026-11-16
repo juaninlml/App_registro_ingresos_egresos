@@ -1,6 +1,6 @@
 # Mis Finanzas
 
-App personal (Next.js + React + Upstash Redis) para llevar:
+App personal (Next.js + React + Neon Postgres) para llevar:
 
 - **Tarjetas** (Santander y otros bancos): estados de cuenta, fechas límite, abonos y cargos a **meses sin intereses**.
 - **Proyección por corte** de lo que debes pagar antes de cada fecha límite.
@@ -13,9 +13,10 @@ Acceso solo con **Google Authenticator** (código de 6 dígitos). Sin contraseñ
 
 ## Puesta en marcha
 
-### 1. Base de datos (Upstash)
-1. En Vercel → tu proyecto → **Storage / Marketplace** → agrega **Upstash Redis** (plan gratis) y conéctalo al proyecto.  
-   Vercel agrega solo `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` (o `KV_REST_API_URL` / `KV_REST_API_TOKEN`; ambos funcionan).
+### 1. Base de datos (Neon)
+1. En Vercel → tu proyecto → **Storage / Marketplace** → agrega **Neon** (plan gratis) y conéctalo al proyecto.  
+   Vercel agrega solo `DATABASE_URL` (también se acepta `POSTGRES_URL`).
+2. No necesitas crear tablas: la app crea la tabla `kv` sola la primera vez que se usa.
 
 ### 2. Variables de entorno en Vercel
 | Variable | Valor |
@@ -31,7 +32,7 @@ Sube el repo a GitHub, impórtalo en Vercel y despliega (no requiere configuraci
 2. Después de configurarlo, `/setup` queda bloqueado. Puedes borrar `SETUP_KEY` de Vercel.
 3. Entra en **Ajustes → Importar respaldo** y selecciona `datos-iniciales.json` (tus datos del Excel).
 
-> Si pierdes el Authenticator: en Upstash borra la llave `fin:totp` y repite el paso 4.
+> Si pierdes el Authenticator: en el editor SQL de Neon ejecuta `DELETE FROM kv WHERE key = 'fin:auth:totp';` y repite el paso 4.
 
 ## Desarrollo local
 ```bash

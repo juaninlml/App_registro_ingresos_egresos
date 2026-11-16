@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import QRCode from "qrcode";
 import { clearFailures, clientIp, lockedFor, registerFailure, safeEqual } from "@/lib/guard";
-import { K, redis } from "@/lib/redis";
+import * as store from "@/lib/store";
+import { K } from "@/lib/store";
 import { COOKIE, cookieOptions, createSessionToken } from "@/lib/session";
 import { newSecretBase32, otpauthUrl, verifyCode } from "@/lib/totp";
 
@@ -20,8 +21,7 @@ export async function POST(req: Request) {
         { status: 503 },
       );
     }
-    const r = redis();
-    if (await r.get<string>(K.totp)) {
+    if (await store.get<string>(K.totp)) {
       return NextResponse.json({ error: "El acceso ya está configurado." }, { status: 403 });
     }
 
@@ -42,14 +42,14 @@ export async function POST(req: Request) {
 
     if (body.action === "start") {
       const secret = newSecretBase32();
-      await r.set(K.pending, secret, { ex: 600 });
+      await store.set(K.pending, secret, { ex: 600 });
       const url = otpauthUrl(secret);
       const qr = await QRCode.toDataURL(url, { width: 280, margin: 1, errorCorrectionLevel: "M" });
       return NextResponse.json({ qr, secret });
     }
 
     if (body.action === "confirm") {
-      const pending = await r.get<string>(K.pending);
+      const pending = await store.get<string>(K.pending);
       if (!pending) {
         return NextResponse.json({ error: "El código QR expiró. Genera uno nuevo." }, { status: 410 });
       }
@@ -58,10 +58,10 @@ export async function POST(req: Request) {
         await registerFailure(ip);
         return NextResponse.json({ error: "El código no coincide. Revisa que la hora de tu teléfono sea automática." }, { status: 401 });
       }
-      const saved = await r.set(K.totp, pending, { nx: true });
+      const saved = await store.set(K.totp, pending, { nx: true });
       if (!saved) return NextResponse.json({ error: "El acceso ya está configurado." }, { status: 403 });
-      await r.del(K.pending);
-      await r.set(K.lastStep, step, { ex: 120 });
+      await store.del(K.pending);
+      await store.set(K.lastStep, step, { ex: 120 });
       await clearFailures(ip);
       const res = NextResponse.json({ ok: true });
       res.cookies.set(COOKIE, await createSessionToken(), cookieOptions);

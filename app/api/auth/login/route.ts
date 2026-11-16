@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { clearFailures, clientIp, lockedFor, registerFailure } from "@/lib/guard";
-import { K, redis } from "@/lib/redis";
+import * as store from "@/lib/store";
+import { K } from "@/lib/store";
 import { COOKIE, cookieOptions, createSessionToken } from "@/lib/session";
 import { verifyCode } from "@/lib/totp";
 
@@ -16,20 +17,19 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json().catch(() => null)) as { code?: unknown } | null;
-    const r = redis();
-    const secret = await r.get<string>(K.totp);
+    const secret = await store.get<string>(K.totp);
     if (!secret) {
       return NextResponse.json({ error: "Aún no configuras Google Authenticator.", needsSetup: true }, { status: 409 });
     }
 
     const step = verifyCode(secret, body?.code);
-    const last = Number((await r.get<number>(K.lastStep)) ?? 0);
+    const last = Number((await store.get<number>(K.lastStep)) ?? 0);
     if (step === null || step <= last) {
       await registerFailure(ip);
       return NextResponse.json({ error: "Código incorrecto o ya usado. Espera al siguiente código." }, { status: 401 });
     }
 
-    await r.set(K.lastStep, step, { ex: 120 });
+    await store.set(K.lastStep, step, { ex: 120 });
     await clearFailures(ip);
     const res = NextResponse.json({ ok: true });
     res.cookies.set(COOKIE, await createSessionToken(), cookieOptions);

@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { K, redis } from "./redis";
+import * as store from "./store";
+import { K } from "./store";
 
 const IP_LIMIT = 5; // intentos fallidos por IP
 const IP_WINDOW = 15 * 60; // segundos
@@ -14,22 +15,19 @@ export function clientIp(req: Request): string {
 
 /** Segundos que faltan para poder reintentar; 0 si no hay bloqueo. */
 export async function lockedFor(ip: string): Promise<number> {
-  const r = redis();
-  const [a, b] = await Promise.all([r.get<number>(K.failIp(ip)), r.get<number>(K.failAll)]);
-  if (Number(a ?? 0) >= IP_LIMIT) return Math.max(await r.ttl(K.failIp(ip)), 1);
-  if (Number(b ?? 0) >= ALL_LIMIT) return Math.max(await r.ttl(K.failAll), 1);
+  const [a, b] = await Promise.all([store.get<number>(K.failIp(ip)), store.get<number>(K.failAll)]);
+  if (Number(a ?? 0) >= IP_LIMIT) return Math.max(await store.ttl(K.failIp(ip)), 1);
+  if (Number(b ?? 0) >= ALL_LIMIT) return Math.max(await store.ttl(K.failAll), 1);
   return 0;
 }
 
 export async function registerFailure(ip: string): Promise<void> {
-  const r = redis();
-  const [a, b] = await Promise.all([r.incr(K.failIp(ip)), r.incr(K.failAll)]);
-  if (a === 1) await r.expire(K.failIp(ip), IP_WINDOW);
-  if (b === 1) await r.expire(K.failAll, ALL_WINDOW);
+  await Promise.all([store.incr(K.failIp(ip), IP_WINDOW), store.incr(K.failAll, ALL_WINDOW)]);
+  await store.purgeExpired().catch(() => {});
 }
 
 export async function clearFailures(ip: string): Promise<void> {
-  await redis().del(K.failIp(ip));
+  await store.del(K.failIp(ip));
 }
 
 /** Comparación en tiempo constante. */
