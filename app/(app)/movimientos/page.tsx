@@ -1,7 +1,7 @@
 "use client";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useData, useTxRange } from "@/components/DataProvider";
-import { Badge, Btn, Card, Empty, Field, Input, NumInput, PageHeader, Select, Stat, cx } from "@/components/ui";
+import { Badge, Btn, Card, Field, Input, Modal, NumInput, PageHeader, Select, Stat, cx } from "@/components/ui";
 import { addDays, addMonths, ahoraHM, fhora, fmonth, fshort, lunesDe, monthKey, weekday, ymd } from "@/lib/dates";
 import { mxn, uid } from "@/lib/money";
 import { PAGO_TARJETA, type Transaction } from "@/lib/types";
@@ -14,7 +14,8 @@ export default function Movimientos() {
   const { db, save, today } = useData();
   const [vista, setVista] = useState<"semana" | "mes">("semana");
   const [ancla, setAncla] = useState(today);
-  const formRef = useRef<HTMLDivElement>(null);
+  const [selDia, setSelDia] = useState(today);
+  const [abierto, setAbierto] = useState(false);
 
   const lunes = lunesDe(ancla);
   const mes = monthKey(ancla);
@@ -48,13 +49,16 @@ export default function Movimientos() {
   const pagosTarjeta = (items ?? []).filter(esPagoTx).reduce((s, t) => s + t.monto, 0);
 
   const mover = (dir: -1 | 1) => setAncla(vista === "semana" ? addDays(ancla, dir * 7) : addMonths(`${mes}-01`, dir));
+  const domingo = addDays(lunes, 6);
+  const diaSel = selDia >= lunes && selDia <= domingo ? selDia : today >= lunes && today <= domingo ? today : lunes;
   const etiqueta = vista === "semana"
     ? `${fshort(lunes)} – ${fshort(addDays(lunes, 6))}`
     : fmonth(mes);
 
   function irAForm(d: string) {
     setF((x) => ({ ...x, fecha: d }));
-    formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setMsg(null);
+    setAbierto(true);
   }
 
   async function agregar(e: React.FormEvent) {
@@ -79,6 +83,7 @@ export default function Movimientos() {
       }
     }
     setF({ ...f, monto: "", nota: "" });
+    setAbierto(false);
   }
 
   async function borrar(t: Transaction) {
@@ -89,17 +94,16 @@ export default function Movimientos() {
   }
 
   function Mov({ t }: { t: Transaction }) {
-    const tono = t.tipo === "ingreso" ? "border-l-ok bg-ok-soft" : esPagoTx(t) ? "border-l-accent bg-accent-soft" : "border-l-danger bg-danger-soft";
+    const tono = t.tipo === "ingreso" ? "border-ok/50 bg-ok-soft" : esPagoTx(t) ? "border-accent/50 bg-accent-soft" : "border-danger/40 bg-danger-soft";
     return (
-      <div className={cx("rounded-lg border-l-4 px-2.5 py-2 text-xs", tono)}>
-        <div className="flex items-start justify-between gap-1">
-          <span className="font-medium text-muted">{fhora(t.hora) || "—"}</span>
-          <button type="button" aria-label="Borrar movimiento" onClick={() => void borrar(t)} className="-mr-1 -mt-0.5 rounded px-1 text-muted hover:text-danger">✕</button>
+      <div className={cx("flex items-center gap-3 rounded-xl border px-3 py-2.5", tono)}>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold text-muted">{fhora(t.hora) || "Sin hora"}</div>
+          <div className="truncate text-sm font-bold">{t.categoria}{esPagoTx(t) && <span className="font-normal text-muted"> → {nombreTarjeta(t.tarjetaId)}</span>}</div>
+          {(t.nota || (!esPagoTx(t) && t.metodo)) && <div className="truncate text-xs text-muted">{t.nota}{!esPagoTx(t) && t.metodo ? `${t.nota ? " · " : ""}Con ${nombreTarjeta(t.metodo)}` : ""}</div>}
         </div>
-        <div className="mt-0.5 text-sm font-semibold leading-tight">{t.categoria}{esPagoTx(t) && <span className="font-normal text-muted"> → {nombreTarjeta(t.tarjetaId)}</span>}</div>
-        {t.nota && <div className="mt-0.5 break-words text-muted">{t.nota}</div>}
-        {!esPagoTx(t) && t.metodo && <div className="mt-0.5 text-muted">Con {nombreTarjeta(t.metodo)}</div>}
-        <div className={cx("num mt-1 text-sm font-bold", t.tipo === "ingreso" && "text-ok")}>{t.tipo === "ingreso" ? "+" : "−"}{mxn(t.monto)}</div>
+        <div className={cx("num shrink-0 text-sm font-bold", t.tipo === "ingreso" && "text-ok")}>{t.tipo === "ingreso" ? "+" : "−"}{mxn(t.monto)}</div>
+        <button type="button" aria-label="Borrar movimiento" onClick={() => void borrar(t)} className="grid size-8 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-danger">✕</button>
       </div>
     );
   }
@@ -126,8 +130,9 @@ export default function Movimientos() {
             <Btn small onClick={() => mover(-1)} aria-label="Anterior">‹</Btn>
             <span className="min-w-36 text-center text-sm font-semibold capitalize">{etiqueta}</span>
             <Btn small onClick={() => mover(1)} aria-label="Siguiente">›</Btn>
-            <Btn small onClick={() => setAncla(today)}>Hoy</Btn>
+            <Btn small onClick={() => { setAncla(today); setSelDia(today); }}>Hoy</Btn>
           </div>
+          <Btn small variant="primary" onClick={() => irAForm(vista === "semana" ? diaSel : today)}>+ Agregar</Btn>
         </>
       } />
       {(err || msg) && <p role="alert" className="mb-3 text-sm text-danger">{err ?? msg}</p>}
@@ -138,34 +143,51 @@ export default function Movimientos() {
       </div>
 
       {!items ? <p className="mb-6 text-sm text-muted">Cargando…</p> : vista === "semana" ? (
-        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-          {DIAS.map((nombre, i) => {
-            const d = addDays(lunes, i);
-            const ts = porDia.get(d) ?? [];
-            const tot = totalDia(d);
-            const hoy = d === today;
+        <div className="mb-6">
+          <div className="mb-3 grid grid-cols-7 gap-1.5 sm:gap-2">
+            {DIAS.map((nombre, i) => {
+              const d = addDays(lunes, i);
+              const tot = totalDia(d);
+              const sel = d === diaSel;
+              return (
+                <button key={d} type="button" onClick={() => setSelDia(d)} aria-pressed={sel} aria-label={`${nombre} ${ymd(d).day}`}
+                  className={cx("flex flex-col items-center rounded-xl border px-1 py-2 text-center transition", sel ? "border-accent bg-accent-soft" : d === today ? "border-accent/60 bg-surface" : "border-border bg-surface hover:border-accent/50")}>
+                  <span className="text-[11px] font-semibold text-muted sm:text-xs">{nombre.slice(0, 3)}</span>
+                  <span className="num text-base font-bold sm:text-lg">{ymd(d).day}</span>
+                  <span className="mt-1 flex h-1.5 gap-1">
+                    {tot.ing > 0 && <span className="size-1.5 rounded-full bg-ok" />}
+                    {tot.gas > 0 && <span className="size-1.5 rounded-full bg-danger" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {(() => {
+            const ts = porDia.get(diaSel) ?? [];
+            const tot = totalDia(diaSel);
+            const nombre = DIAS[(weekday(diaSel) + 6) % 7];
             return (
-              <div key={d} className={cx("flex min-h-28 flex-col rounded-2xl border bg-surface", hoy ? "border-accent" : "border-border")}>
-                <div className="flex items-center justify-between gap-1 border-b border-border px-3 py-2">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-sm font-semibold">{nombre}</span>
-                    <span className="num text-lg font-bold">{ymd(d).day}</span>
-                    {hoy && <Badge tone="accent">Hoy</Badge>}
+              <div className={cx("overflow-hidden rounded-2xl border bg-surface", diaSel === today ? "border-accent" : "border-border")}>
+                <div className="flex items-center justify-between gap-2 border-b border-border bg-surface-2 px-4 py-3">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-semibold">{nombre}</span>
+                    {diaSel === today && <Badge tone="accent">Hoy</Badge>}
+                    <span className="num text-xl font-bold">{ymd(diaSel).day}</span>
                   </div>
-                  <button type="button" aria-label={`Agregar movimiento el ${nombre} ${ymd(d).day}`} onClick={() => irAForm(d)} className="grid size-7 place-items-center rounded-full bg-surface-2 text-base text-muted hover:text-fg">+</button>
+                  <button type="button" aria-label={`Agregar movimiento el ${nombre} ${ymd(diaSel).day}`} onClick={() => irAForm(diaSel)} className="grid size-9 place-items-center rounded-full bg-accent text-lg font-semibold text-accent-fg">+</button>
                 </div>
-                <div className="flex-1 space-y-2 p-2">
-                  {ts.length ? ts.map((t) => <Mov key={t.id} t={t} />) : <p className="px-1 py-2 text-xs text-muted">Sin movimientos</p>}
+                <div className="space-y-2 p-3">
+                  {ts.length ? ts.map((t) => <Mov key={t.id} t={t} />) : <p className="py-6 text-center text-sm text-muted">Sin movimientos este día</p>}
                 </div>
                 {ts.length > 0 && (
-                  <div className="num flex justify-between gap-2 border-t border-border px-3 py-1.5 text-xs">
-                    <span className="text-ok">{tot.ing > 0 ? `+${mxn(tot.ing)}` : ""}</span>
-                    <span>{tot.gas > 0 ? `−${mxn(tot.gas)}` : ""}</span>
+                  <div className="num flex justify-between gap-3 border-t border-border px-4 py-2.5 text-sm font-semibold">
+                    <span className="text-ok">{tot.ing > 0 ? `+${mxn(tot.ing)}` : "Ingresos $0.00"}</span>
+                    <span>{tot.gas > 0 ? `−${mxn(tot.gas)}` : "Egresos $0.00"}</span>
                   </div>
                 )}
               </div>
             );
-          })}
+          })()}
         </div>
       ) : (
         <div className="mb-6">
@@ -178,7 +200,7 @@ export default function Movimientos() {
                 if (!d) return <div key={i} />;
                 const tot = totalDia(d);
                 return (
-                  <button key={d} type="button" onClick={() => { setAncla(d); setVista("semana"); }} aria-label={`Ver semana del ${d}`}
+                  <button key={d} type="button" onClick={() => { setAncla(d); setSelDia(d); setVista("semana"); }} aria-label={`Ver semana del ${d}`}
                     className={cx("flex min-h-16 flex-col items-stretch rounded-lg border p-1 text-left text-[10px] leading-tight transition hover:border-accent sm:min-h-20 sm:p-1.5 sm:text-xs", d === today ? "border-accent bg-accent-soft" : "border-border bg-surface-2/40")}>
                     <span className="num text-xs font-bold sm:text-sm">{ymd(d).day}</span>
                     {tot.ing > 0 && <span className="num mt-0.5 truncate text-ok">+{corto(tot.ing)}</span>}
@@ -205,22 +227,22 @@ export default function Movimientos() {
           </div>
         </div>
       )}
-      {items && !items.length && <div className="mb-6"><Empty>Sin movimientos en este periodo.</Empty></div>}
 
-      <div ref={formRef}>
-        <Card className="mb-6">
+      <Modal open={abierto} onClose={() => setAbierto(false)} title={tipo === "gasto" ? "Agregar gasto" : "Agregar ingreso"}>
+        <div>
           <div className="mb-3 inline-flex rounded-xl bg-surface-2 p-1 text-sm">
             {(["gasto", "ingreso"] as const).map((t) => (
               <button key={t} type="button" onClick={() => setTipo(t)} className={`rounded-lg px-4 py-1.5 font-medium ${tipo === t ? "bg-surface shadow-sm" : "text-muted"}`}>{t === "gasto" ? "Gasto" : "Ingreso"}</button>
             ))}
           </div>
-          <form onSubmit={agregar} className="grid gap-3 sm:grid-cols-6">
-            <div className="sm:col-span-2"><Field label="Monto"><NumInput value={f.monto} onChange={(n) => setF({ ...f, monto: n })} min={0.01} required /></Field></div>
-            <div className="sm:col-span-2"><Field label="Categoría"><Select value={cat} onChange={(e) => setF({ ...f, cat: e.target.value })}>{cats.map((c) => <option key={c}>{c}</option>)}</Select></Field></div>
-            <div className="sm:col-span-2"><Field label="Fecha" hint="La hora se guarda sola al registrar"><Input type="date" value={fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} required /></Field></div>
-            <div className="sm:col-span-3"><Field label="Nota"><Input value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} maxLength={120} placeholder="Opcional" /></Field></div>
+          {msg && <p role="alert" className="mb-3 text-sm text-danger">{msg}</p>}
+          <form onSubmit={agregar} className="grid grid-cols-2 gap-3">
+            <div><Field label="Monto"><NumInput value={f.monto} onChange={(n) => setF({ ...f, monto: n })} min={0.01} required /></Field></div>
+            <div className="col-span-2"><Field label="Categoría"><Select value={cat} onChange={(e) => setF({ ...f, cat: e.target.value })}>{cats.map((c) => <option key={c}>{c}</option>)}</Select></Field></div>
+            <div><Field label="Fecha" hint="La hora se guarda sola al registrar"><Input type="date" value={fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} required /></Field></div>
+            <div className="col-span-2"><Field label="Nota"><Input value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} maxLength={120} placeholder="Opcional" /></Field></div>
             {esPago ? (
-              <div className="sm:col-span-2">
+              <div className="col-span-2">
                 <Field label="Tarjeta que pagas" hint="Se registra también como abono de esa tarjeta">
                   <Select value={tarjeta} onChange={(e) => setF({ ...f, tarjeta: e.target.value })} required>
                     {!db.cards.length && <option value="">Sin tarjetas</option>}
@@ -229,12 +251,12 @@ export default function Movimientos() {
                 </Field>
               </div>
             ) : tipo === "gasto" ? (
-              <div className="sm:col-span-2"><Field label="Pagado con"><Select value={f.metodo} onChange={(e) => setF({ ...f, metodo: e.target.value })}><option value="">Efectivo / débito</option>{db.cards.map((c) => <option key={c.id} value={c.id}>{c.banco} {c.nombre}</option>)}</Select></Field></div>
+              <div className="col-span-2"><Field label="Pagado con"><Select value={f.metodo} onChange={(e) => setF({ ...f, metodo: e.target.value })}><option value="">Efectivo / débito</option>{db.cards.map((c) => <option key={c.id} value={c.id}>{c.banco} {c.nombre}</option>)}</Select></Field></div>
             ) : null}
-            <div className="flex items-end sm:col-span-1"><Btn variant="primary" type="submit" disabled={!map} className="w-full">Agregar</Btn></div>
+            <div className="col-span-2 flex items-end"><Btn variant="primary" type="submit" disabled={!map} className="w-full">Agregar</Btn></div>
           </form>
-        </Card>
-      </div>
+        </div>
+      </Modal>
     </>
   );
 }
