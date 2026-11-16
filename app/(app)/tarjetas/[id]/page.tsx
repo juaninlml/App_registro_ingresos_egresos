@@ -6,7 +6,9 @@ import { readTxMonth, useData, type Write } from "@/components/DataProvider";
 import { BancoColorFields, CardVisual, isColorId, type BancoColor } from "@/components/CardVisual";
 import { IconBorrar, IconMas, IconPagoTarjeta } from "@/components/icons";
 import { AnimatedNumber, useToast } from "@/components/motion";
+import { DebitoDetalle } from "@/components/DebitoDetalle";
 import { ImportStatement } from "@/components/ImportStatement";
+import { esDebito } from "@/lib/cuentas";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, TableWrap, td, th } from "@/components/ui";
 import { addDays, addMonths, daysBetween, fdate, fshort, isISO, nextBusinessDay } from "@/lib/dates";
 import { abonadoDesdeCorte, deudaActual, latestStatement, msiInfo, primerCorteSugerido } from "@/lib/finance";
@@ -25,6 +27,7 @@ export default function TarjetaDetalle() {
   if (!card) {
     return <Empty>No se encontró la tarjeta. <Link href="/tarjetas" className="font-medium text-accent underline">Volver</Link></Empty>;
   }
+  if (esDebito(card)) return <DebitoDetalle card={card} />;
   const st = latestStatement(card);
   const abonado = st ? abonadoDesdeCorte(card, db.payments, st) : 0;
   const falta = st ? Math.max(0, round2(st.pagoNoIntereses - abonado)) : 0;

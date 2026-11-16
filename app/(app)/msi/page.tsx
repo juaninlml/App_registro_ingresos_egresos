@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useData } from "@/components/DataProvider";
 import { Badge, Card, Empty, Field, NumInput, PageHeader, Select, TableWrap, td, th } from "@/components/ui";
 import { fdate, fshort } from "@/lib/dates";
+import { creditos } from "@/lib/cuentas";
 import { projectCuts } from "@/lib/finance";
 import { mxn } from "@/lib/money";
 
@@ -10,8 +11,9 @@ export default function Proyeccion() {
   const { db } = useData();
   const [sel, setSel] = useState("");
   const [compras, setCompras] = useState<number | "">(db.plan?.comprasEstimadas ?? 0);
-  const card = db.cards.find((c) => c.id === sel) ?? db.cards[0];
-  if (!card) return <><PageHeader title="Proyección por corte" /><Empty>Primero agrega una tarjeta.</Empty></>;
+  const credito = creditos(db.cards);
+  const card = credito.find((c) => c.id === sel) ?? credito[0];
+  if (!card) return <><PageHeader title="Proyección por corte" /><Empty>Primero agrega una tarjeta de crédito.</Empty></>;
   const rows = projectCuts(card, db.msi, Number(compras) || 0);
   const msis = db.msi.filter((m) => m.cardId === card.id);
   const nombre = (id: string) => msis.find((m) => m.id === id)?.descripcion ?? "?";
@@ -22,7 +24,7 @@ export default function Proyeccion() {
       <Card className="mb-5 grid gap-3 sm:grid-cols-2">
         <Field label="Tarjeta">
           <Select value={card.id} onChange={(e) => setSel(e.target.value)}>
-            {db.cards.map((c) => <option key={c.id} value={c.id}>{c.banco} {c.nombre}</option>)}
+            {credito.map((c) => <option key={c.id} value={c.id}>{c.banco} {c.nombre}</option>)}
           </Select>
         </Field>
         <Field label="Compras estimadas por corte" hint="Compras regulares futuras (0 si ya no usarás la tarjeta)">

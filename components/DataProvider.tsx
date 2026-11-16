@@ -16,6 +16,8 @@ interface Ctx {
   today: string;
   /** Cambia cada vez que se recargan los datos tras un conflicto: los movimientos se vuelven a leer. */
   epoch: number;
+  /** Cambia cada vez que se guardan movimientos: las vistas de resumen vuelven a leerlos. */
+  txRev: number;
   save: <K extends DBKey>(key: K, value: DB[K]) => Promise<boolean>;
   /** Guarda varias secciones juntas: o se guardan todas o ninguna. */
   commit: (writes: Write[]) => Promise<boolean>;
@@ -89,6 +91,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [today, setToday] = useState(localToday);
   const [epoch, setEpoch] = useState(0);
+  const [txRev, setTxRev] = useState(0);
   const saving = useRef(0);
 
   const reload = useCallback(async () => {
@@ -133,6 +136,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       await sendWrites(writes);
       setError(null);
+      if (writes.some((w) => w.key.startsWith("tx:"))) setTxRev((n) => n + 1);
       return true;
     } catch (e) {
       // deshace solo lo que cambió esta escritura (y solo si nadie lo cambió después)
@@ -158,13 +162,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const save: Ctx["save"] = useCallback((key, value) => commit([{ key, value }]), [commit]);
 
-  const value = useMemo(() => ({ db, ready, error, today, epoch, save, commit, reload }), [db, ready, error, today, epoch, save, commit, reload]);
+  const value = useMemo(() => ({ db, ready, error, today, epoch, txRev, save, commit, reload }), [db, ready, error, today, epoch, txRev, save, commit, reload]);
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
 }
 
 /** Lee los movimientos de varios meses (para el resumen). */
 export function useTxMonths(months: string[]) {
-  const { epoch } = useData();
+  const { epoch, txRev } = useData();
   const key = months.join(",");
   const [data, setData] = useState<{ key: string; map: Record<string, Transaction[]> } | null>(null);
   useEffect(() => {
@@ -176,7 +180,7 @@ export function useTxMonths(months: string[]) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, epoch]);
+  }, [key, epoch, txRev]);
   return data?.key === key ? data.map : null;
 }
 

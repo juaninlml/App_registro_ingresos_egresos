@@ -5,6 +5,7 @@ import { useData } from "@/components/DataProvider";
 import { IconCerrar } from "@/components/icons";
 import { Badge, Btn, Card, Empty, Field, IconBtn, Input, NumInput, PageHeader, Section, Stat, TableWrap, cx, td, th } from "@/components/ui";
 import { fdate, fshort, weekday } from "@/lib/dates";
+import { creditos } from "@/lib/cuentas";
 import { deudaActual, latestStatement } from "@/lib/finance";
 import Link from "next/link";
 import { mxn } from "@/lib/money";
@@ -14,13 +15,14 @@ import type { Card as CardT, PlanConfig } from "@/lib/types";
 export default function Plan() {
   const { db, save, today } = useData();
   const [sel, setSel] = useState("");
-  const card = db.cards.find((c) => c.id === (sel || db.plan?.cardId)) ?? db.cards[0];
+  const credito = creditos(db.cards);
+  const card = credito.find((c) => c.id === (sel || db.plan?.cardId)) ?? credito[0];
   const [nuevoSem, setNuevoSem] = useState({ desde: "", monto: "" as number | "" });
   const [nuevoExtra, setNuevoExtra] = useState({ fecha: "", monto: "" as number | "", nota: "" });
   const [custom, setCustom] = useState<number | "">("");
 
-  if (!card) return <><PageHeader title="Plan de abonos" /><Empty>Primero agrega una tarjeta.</Empty></>;
-  const selector = <SelectorTarjeta cards={db.cards} actual={card.id} conPlan={db.plan?.cardId} onSelect={setSel} />;
+  if (!card) return <><PageHeader title="Plan de abonos" /><Empty>Primero agrega una tarjeta de crédito.</Empty></>;
+  const selector = <SelectorTarjeta cards={credito} actual={card.id} conPlan={db.plan?.cardId} onSelect={setSel} />;
   if (!latestStatement(card)) {
     return (
       <>

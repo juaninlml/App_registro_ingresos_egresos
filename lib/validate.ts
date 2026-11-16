@@ -40,7 +40,8 @@ const LOAN: Shape = {
   primerPago: "date", pagoMensual: "num?", ivaPct: "num?", pagosHechos: "int", notas: "str?",
 };
 const PAYMENT: Shape = { id: "str", fecha: "date", monto: "num", targetId: "str", nota: "str?", txId: "str?", loanPago: "int?" };
-const TX: Shape = { id: "str", fecha: "date", monto: "num", categoria: "str", nota: "str?", metodo: "str?", hora: "str?", tarjetaId: "str?" };
+const TX: Shape = { id: "str", fecha: "date", monto: "num", categoria: "str", nota: "str?", metodo: "str?", hora: "str?", tarjetaId: "str?", fijoId: "str?" };
+const FIJO: Shape = { id: "str", nombre: "str", monto: "num", dia: "int", categoria: "str", metodo: "str?" };
 
 function list(v: unknown, s: Shape, extra?: (o: Record<string, unknown>) => boolean): boolean {
   return (
@@ -59,7 +60,14 @@ export function validateValue(key: DBKey | `tx:${string}`, v: unknown): boolean 
   }
   switch (key as DBKey) {
     case "cards":
-      return list(v, CARD, (o) => Array.isArray(o.statements) && o.statements.length <= 240 && o.statements.every((s) => shape(s, STATEMENT)));
+      return list(
+        v,
+        CARD,
+        (o) =>
+          (o.tipo === undefined || o.tipo === "credito" || o.tipo === "debito") &&
+          (o.saldo === undefined || (shape(o.saldo, { monto: "num", fecha: "date", hora: "str" }) && /^\d{2}:\d{2}$/.test(String((o.saldo as Record<string, unknown>).hora)))) &&
+          Array.isArray(o.statements) && o.statements.length <= 240 && o.statements.every((s) => shape(s, STATEMENT)),
+      );
     case "msi":
       return list(v, MSI);
     case "loans":
@@ -76,6 +84,8 @@ export function validateValue(key: DBKey | `tx:${string}`, v: unknown): boolean 
         Array.isArray(p.extras) && p.extras.length <= 500 && p.extras.every((s) => shape(s, { fecha: "date", monto: "num", nota: "str?" }))
       );
     }
+    case "fijos":
+      return list(v, FIJO, (o) => (o.dia as number) >= 1 && (o.dia as number) <= 31 && (o.monto as number) > 0 && (o.desde === undefined || (typeof o.desde === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(o.desde))));
     case "settings": {
       const s = v as Record<string, unknown> | null;
       return !!s && typeof s === "object" && strList(s.categoriasGasto) && strList(s.categoriasIngreso);

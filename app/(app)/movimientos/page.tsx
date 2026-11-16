@@ -1,11 +1,15 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useData, useTxRange } from "@/components/DataProvider";
+import { CuentaSelect, DisponibleCard } from "@/components/Cuentas";
+import { FijosLista, movimientoDeFijo } from "@/components/Fijos";
 import { IconAdelante, IconAtras, IconBorrar, IconGasto, IconIngreso, IconMas, IconPagoTarjeta } from "@/components/icons";
 import { AnimatedNumber, Segmented, useToast } from "@/components/motion";
 import { Badge, Btn, Card, Field, IconBtn, Input, Modal, NumInput, PageHeader, Select, Skeleton, Stat, cx } from "@/components/ui";
 import { addDays, addMonths, ahoraHM, fhora, fmonth, fshort, lunesDe, monthKey, weekday, ymd } from "@/lib/dates";
 import { mxn, uid } from "@/lib/money";
+import { creditos, debitos, esDebito } from "@/lib/cuentas";
+import { fijosDelMes, porPagar, type FijoDelMes } from "@/lib/fijos";
 import { PAGO_TARJETA, type Transaction } from "@/lib/types";
 
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -53,14 +57,21 @@ export default function Movimientos() {
   const { map, err, add, remove } = useTxRange(meses);
 
   const [tipo, setTipo] = useState<"gasto" | "ingreso">("gasto");
-  const [f, setF] = useState({ monto: "" as number | "", cat: "", nota: "", fecha: "", metodo: "", tarjeta: "" });
+  // metodo null = usar la tarjeta de débito principal
+  const [f, setF] = useState({ monto: "" as number | "", cat: "", nota: "", fecha: "", metodo: null as string | null, tarjeta: "" });
   const [msg, setMsg] = useState<string | null>(null);
 
   const catsBase = tipo === "gasto" ? db.settings.categoriasGasto : db.settings.categoriasIngreso;
   const cats = tipo === "gasto" && !catsBase.includes(PAGO_TARJETA) ? [...catsBase, PAGO_TARJETA] : catsBase;
   const cat = f.cat && cats.includes(f.cat) ? f.cat : cats[0] ?? "Otros";
   const esPago = tipo === "gasto" && cat === PAGO_TARJETA;
-  const tarjeta = f.tarjeta && db.cards.some((c) => c.id === f.tarjeta) ? f.tarjeta : db.cards[0]?.id ?? "";
+  const credito = creditos(db.cards);
+  const tarjeta = f.tarjeta && credito.some((c) => c.id === f.tarjeta) ? f.tarjeta : credito[0]?.id ?? "";
+  // cuenta del movimiento: ingresos y pagos de tarjeta solo pueden ser débito o efectivo
+  const cuentaPrincipal = debitos(db.cards)[0]?.id ?? "";
+  const elegida = f.metodo ?? cuentaPrincipal;
+  const soloDebito = tipo === "ingreso" || esPago;
+  const cuenta = soloDebito && elegida && !esDebito(db.cards.find((c) => c.id === elegida)) ? cuentaPrincipal : elegida;
   const fecha = f.fecha || today;
   const nombreTarjeta = (id?: string) => {
     const c = db.cards.find((x) => x.id === id);
@@ -75,6 +86,10 @@ export default function Movimientos() {
   const ing = suma(items ?? [], "ingreso");
   const gas = suma(items ?? [], "gasto");
   const pagosTarjeta = (items ?? []).filter(esPagoTx).reduce((s, t) => s + t.monto, 0);
+  // gastos fijos del periodo: los que faltan por pagar ya cuentan en los egresos
+  const fijosRango = map ? meses.flatMap((m) => fijosDelMes(db.fijos, map[m] ?? [], m, today, db.cards)).filter((x) => x.fecha >= desde && x.fecha <= hasta) : [];
+  const fijosPend = porPagar(fijosRango);
+  const fijosMes = map ? fijosDelMes(db.fijos, map[mes] ?? [], mes, today, db.cards) : null;
 
   const mover = (dir: -1 | 1) => setAncla(vista === "semana" ? addDays(ancla, dir * 7) : addMonths(`${mes}-01`, dir));
   const domingo = addDays(lunes, 6);
@@ -82,6 +97,16 @@ export default function Movimientos() {
   const etiqueta = vista === "semana"
     ? `${fshort(lunes)} – ${fshort(addDays(lunes, 6))}`
     : fmonth(mes);
+
+  /** Registra el pago de un gasto fijo como movimiento (queda ligado para no contarlo dos veces). */
+  async function pagarFijo(x: FijoDelMes) {
+    const t = movimientoDeFijo(x.fijo, monthKey(x.fecha), today);
+    marcar(setRecientes, t.id, 2200);
+    if (t.fecha >= lunes && t.fecha <= addDays(lunes, 6)) setSelDia(t.fecha);
+    if (await add(t)) {
+      toast({ tone: "danger", icon: <IconGasto size={18} />, title: `${x.fijo.nombre} pagado`, detail: `−${mxn(t.monto)} · ${x.fijo.metodo ? `con ${nombreTarjeta(x.fijo.metodo)}` : "en efectivo"}` });
+    }
+  }
 
   function irAForm(d: string) {
     setF((x) => ({ ...x, fecha: d }));
@@ -92,13 +117,13 @@ export default function Movimientos() {
   async function agregar(e: React.FormEvent) {
     e.preventDefault();
     if (esPago && !tarjeta) {
-      setMsg("Primero agrega una tarjeta para registrar pagos.");
+      setMsg("Primero agrega una tarjeta de crédito para registrar pagos.");
       return;
     }
     setMsg(null);
     const t: Transaction = {
       id: uid(), fecha, hora: ahoraHM(), tipo, monto: Number(f.monto), categoria: cat, nota: f.nota.trim() || undefined,
-      metodo: !esPago && tipo === "gasto" ? f.metodo || undefined : undefined,
+      metodo: cuenta || undefined,
       tarjetaId: esPago ? tarjeta : undefined,
     };
     // el movimiento y el abono a la tarjeta se guardan juntos: o ambos o ninguno
@@ -166,7 +191,7 @@ export default function Movimientos() {
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{k === "pago" ? `Pago a ${nombreTarjeta(t.tarjetaId)}` : t.categoria}</div>
           <div className="truncate text-xs text-muted">
-            {[fhora(t.hora), t.nota, k !== "pago" && t.metodo ? `Con ${nombreTarjeta(t.metodo)}` : null].filter(Boolean).join(" · ") || "Sin hora"}
+            {[fhora(t.hora), t.nota, t.metodo ? `${k === "ingreso" ? "En" : k === "pago" ? "Desde" : "Con"} ${nombreTarjeta(t.metodo)}` : null].filter(Boolean).join(" · ") || "Sin hora"}
           </div>
         </div>
         <div className={cx("num shrink-0 text-sm font-semibold", k === "ingreso" ? "text-ok" : k === "pago" ? "text-accent" : "")}>{t.tipo === "ingreso" ? "+" : "−"}{mxn(t.monto)}</div>
@@ -203,9 +228,18 @@ export default function Movimientos() {
       } />
       {(err || msg) && <p role="alert" className="mb-3 text-sm text-danger">{err ?? msg}</p>}
 
+      <DisponibleCard />
+
       <div className="mb-5 grid grid-cols-2 gap-3">
         <Stat label={`Ingresos ${vista === "semana" ? "de la semana" : "del mes"}`} value={items ? <AnimatedNumber value={ing} tone="ok" /> : <Skeleton className="mt-1 h-7 w-32" />} tone="ok" />
-        <Stat label={`Egresos ${vista === "semana" ? "de la semana" : "del mes"}`} value={items ? <AnimatedNumber value={gas} tone="danger" /> : <Skeleton className="mt-1 h-7 w-32" />} sub={pagosTarjeta > 0 ? <>incluye <AnimatedNumber value={pagosTarjeta} /> en pagos de tarjeta</> : undefined} />
+        <Stat label={`Egresos ${vista === "semana" ? "de la semana" : "del mes"}`} value={items ? <AnimatedNumber value={gas + fijosPend} tone={{ up: "danger", down: "ok" }} /> : <Skeleton className="mt-1 h-7 w-32" />} sub={
+          fijosPend > 0 || pagosTarjeta > 0 ? (
+            <>
+              {fijosPend > 0 && <span className="block">incluye <AnimatedNumber value={fijosPend} /> de fijos por pagar</span>}
+              {pagosTarjeta > 0 && <span className="block">incluye <AnimatedNumber value={pagosTarjeta} /> en pagos de tarjeta</span>}
+            </>
+          ) : undefined
+        } />
       </div>
 
       {!items ? <Skeleton className="mb-6 h-72 rounded-2xl" /> : vista === "semana" ? (
@@ -223,6 +257,7 @@ export default function Movimientos() {
                   <span className="mt-1 flex h-1.5 gap-1">
                     {tot.ing > 0 && <span className="size-1.5 rounded-full bg-ok" />}
                     {tot.gas > 0 && <span className="size-1.5 rounded-full bg-danger" />}
+                    {fijosRango.some((x) => x.fecha === d && x.estado !== "pagado") && <span title="Gasto fijo por pagar" className="size-1.5 rounded-full border border-danger" />}
                   </span>
                 </button>
               );
@@ -230,6 +265,7 @@ export default function Movimientos() {
           </div>
           {(() => {
             const ts = porDia.get(diaSel) ?? [];
+            const fijosDia = fijosRango.filter((x) => x.fecha === diaSel && x.estado !== "pagado");
             const tot = totalDia(diaSel);
             const nombre = DIAS[(weekday(diaSel) + 6) % 7];
             return (
@@ -243,7 +279,18 @@ export default function Movimientos() {
                   <IconBtn label={`Agregar movimiento el ${nombre} ${ymd(diaSel).day}`} onClick={() => irAForm(diaSel)} className="bg-accent !text-accent-fg hover:bg-accent hover:opacity-90"><IconMas size={20} /></IconBtn>
                 </div>
                 <div className="space-y-2 p-3">
-                  {ts.length ? ts.map(mov) : (
+                  {fijosDia.map((x) => (
+                    <div key={x.fijo.id} className="flex items-center gap-3 rounded-xl border border-dashed border-border py-2.5 pl-2.5 pr-1.5">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-full border border-dashed border-danger/50 text-danger"><IconGasto size={18} /></span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold">{x.fijo.nombre}</div>
+                        <div className="truncate text-xs text-muted">Gasto fijo por pagar · {x.fijo.categoria}</div>
+                      </div>
+                      <div className="num shrink-0 text-sm font-semibold text-muted">−{mxn(x.fijo.monto)}</div>
+                      <Btn small variant="primary" onClick={() => void pagarFijo(x)}>Pagar</Btn>
+                    </div>
+                  ))}
+                  {ts.length ? ts.map(mov) : fijosDia.length ? null : (
                     <div className="py-6 text-center text-sm text-muted">
                       <p>Sin movimientos este día.</p>
                       <button type="button" onClick={() => irAForm(diaSel)} className="mt-1 font-medium text-accent underline">Registrar uno</button>
@@ -299,6 +346,10 @@ export default function Movimientos() {
         </div>
       )}
 
+      <section className="mb-6">
+        <FijosLista month={mes} lista={fijosMes} onPagar={pagarFijo} />
+      </section>
+
       <Modal open={abierto} onClose={() => setAbierto(false)} title={esPago ? "Registrar pago de tarjeta" : tipo === "gasto" ? "Registrar gasto" : "Registrar ingreso"}>
         <div>
           <div className="mb-4">
@@ -319,16 +370,19 @@ export default function Movimientos() {
             <div className="col-span-2"><Field label="Nota"><Input value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} maxLength={120} placeholder="Opcional" /></Field></div>
             {esPago ? (
               <div className="col-span-2">
-                <Field label="Tarjeta que pagas" hint="Se registra también como abono de esa tarjeta">
-                  <Select value={tarjeta} onChange={(e) => setF({ ...f, tarjeta: e.target.value })} required>
-                    {!db.cards.length && <option value="">Sin tarjetas</option>}
-                    {db.cards.map((c) => <option key={c.id} value={c.id}>{c.banco} {c.nombre}{c.terminacion ? ` •••• ${c.terminacion}` : ""}</option>)}
-                  </Select>
+                <Field label="Tarjeta de crédito que pagas" hint="Se registra también como abono de esa tarjeta">
+                  <CuentaSelect value={tarjeta} onChange={(v) => setF({ ...f, tarjeta: v })} solo="credito" efectivo={false} required />
                 </Field>
               </div>
-            ) : tipo === "gasto" ? (
-              <div className="col-span-2"><Field label="Pagado con"><Select value={f.metodo} onChange={(e) => setF({ ...f, metodo: e.target.value })}><option value="">Efectivo / débito</option>{db.cards.map((c) => <option key={c.id} value={c.id}>{c.banco} {c.nombre}</option>)}</Select></Field></div>
             ) : null}
+            <div className="col-span-2">
+              <Field
+                label={esPago ? "Pagado desde" : tipo === "ingreso" ? "Depositado en" : "Pagado con"}
+                hint={!cuenta ? "En efectivo: no cambia el saldo de ninguna tarjeta." : esDebito(db.cards.find((c) => c.id === cuenta)) ? (tipo === "ingreso" ? "Se suma al saldo de esa tarjeta de débito." : "Se resta del saldo de esa tarjeta de débito.") : "Con crédito no sale de tu dinero; se suma a la deuda de la tarjeta."}
+              >
+                <CuentaSelect value={cuenta} onChange={(v) => setF({ ...f, metodo: v })} solo={soloDebito ? "debito" : undefined} />
+              </Field>
+            </div>
             <div className="col-span-2 flex items-end">
               <Btn variant="primary" type="submit" disabled={!map || guardando} className="w-full">
                 {guardando ? "Guardando…" : esPago ? "Registrar pago" : tipo === "gasto" ? "Registrar gasto" : "Registrar ingreso"}

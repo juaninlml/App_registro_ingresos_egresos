@@ -11,14 +11,18 @@ export interface Statement {
 
 export interface Card {
   id: string;
+  /** Crédito (estados de cuenta, MSI, plan) o débito (dinero propio con saldo). Sin valor = crédito. */
+  tipo?: "credito" | "debito";
   banco: string;
   nombre: string;
   terminacion?: string; // últimos 4 dígitos (nunca guardes el número completo)
   limite?: number;
-  diaCorte: number;
+  diaCorte: number; // solo crédito (en débito queda en 0)
   color?: string; // id de color (ver components/CardVisual.tsx); si falta se usa el del banco
-  statements: Statement[];
+  statements: Statement[]; // solo crédito
   notas?: string;
+  /** Solo débito: saldo real capturado; desde ahí se suman y restan sus movimientos. */
+  saldo?: SaldoDebito;
 }
 
 /** Cargo diferido a meses sin intereses. El calendario se deriva de `primerCorte`. */
@@ -70,9 +74,30 @@ export interface Transaction {
   monto: number;
   categoria: string;
   nota?: string;
-  metodo?: string; // "efectivo/débito" o id de tarjeta con la que se pagó
+  /** Cuenta del movimiento: en gastos, la tarjeta con que se pagó; en ingresos, la de débito donde entró;
+   *  en pagos de tarjeta, la de débito de donde salió. Vacío = efectivo. */
+  metodo?: string;
   hora?: string; // hora de registro local "HH:MM"
   tarjetaId?: string; // en la categoría "Pago de tarjeta": la tarjeta que se paga
+  fijoId?: string; // si es el pago de un gasto fijo de ese mes
+}
+
+/** Gasto que se repite cada mes (renta, suscripciones…). Queda «por pagar» hasta que se registra. */
+export interface GastoFijo {
+  id: string;
+  nombre: string;
+  monto: number;
+  dia: number; // día del mes (si el mes es más corto, se usa el último día)
+  categoria: string;
+  metodo?: string; // id de la tarjeta (crédito o débito) con que se paga; vacío = efectivo
+  desde?: string; // mes "YYYY-MM" desde el que aplica
+}
+
+/** Saldo real de una tarjeta de débito capturado en un momento; desde ahí se suman y restan sus movimientos. */
+export interface SaldoDebito {
+  monto: number;
+  fecha: ISODate;
+  hora: string; // "HH:MM" local en que lo capturaste
 }
 
 export interface PlanConfig {
@@ -95,6 +120,7 @@ export interface DB {
   payments: Payment[];
   plan: PlanConfig | null;
   settings: Settings;
+  fijos: GastoFijo[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -122,7 +148,8 @@ export const EMPTY_DB: DB = {
   payments: [],
   plan: null,
   settings: DEFAULT_SETTINGS,
+  fijos: [],
 };
 
-export const DB_KEYS = ["cards", "msi", "loans", "payments", "plan", "settings"] as const;
+export const DB_KEYS = ["cards", "msi", "loans", "payments", "plan", "settings", "fijos"] as const;
 export type DBKey = (typeof DB_KEYS)[number];

@@ -1,7 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { useData, useTxMonths } from "@/components/DataProvider";
+import { readTxMonth, useData, useTxMonths } from "@/components/DataProvider";
+import { DisponibleCard } from "@/components/Cuentas";
+import { FijosLista, movimientoDeFijo } from "@/components/Fijos";
+import { IconGasto } from "@/components/icons";
+import { useToast } from "@/components/motion";
+import { creditos } from "@/lib/cuentas";
+import { fijosDelMes, porPagar, type FijoDelMes } from "@/lib/fijos";
 import { Bars, Donut, GroupedBars, Legend, LineArea } from "@/components/charts";
 import { IconAdelante } from "@/components/icons";
 import { AnimatedNumber } from "@/components/motion";
@@ -17,14 +23,15 @@ const mesCorto = (k: string) => fmonth(k).split(" ")[0].slice(0, 3);
 const PUNTO = { rojo: "bg-danger", ambar: "bg-warn", info: "bg-muted" } as const;
 
 export default function Resumen() {
-  const { db, today } = useData();
+  const { db, today, commit } = useData();
+  const toast = useToast();
   const mes = monthKey(today);
   const meses = Array.from({ length: 6 }, (_, i) => addMonthKey(mes, i - 5));
   const txs = useTxMonths(meses);
   const alerts = buildAlerts(db, today);
   const [todas, setTodas] = useState(false);
 
-  const cards = db.cards.map((card) => {
+  const cards = creditos(db.cards).map((card) => {
     const st = latestStatement(card);
     const abonado = st ? abonadoDesdeCorte(card, db.payments, st) : 0;
     return { card, st, abonado, falta: st ? Math.max(0, st.pagoNoIntereses - abonado) : 0 };
@@ -39,6 +46,22 @@ export default function Resumen() {
     return { m, ing: l.filter((t) => t.tipo === "ingreso").reduce((s, t) => s + t.monto, 0), gas: l.filter((t) => t.tipo === "gasto").reduce((s, t) => s + t.monto, 0) };
   });
   const actual = porMes[porMes.length - 1];
+  // gastos fijos del mes: los que faltan por pagar ya cuentan en los egresos y el balance
+  const fijosMes = txs ? fijosDelMes(db.fijos, txs[mes] ?? [], mes, today, db.cards) : null;
+  const fijosPend = fijosMes ? porPagar(fijosMes) : 0;
+  const egresosMes = actual.gas + fijosPend;
+
+  async function pagarFijo(x: FijoDelMes) {
+    const t = movimientoDeFijo(x.fijo, mes, today);
+    const m = t.fecha.slice(0, 7);
+    try {
+      if (await commit([{ key: `tx:${m}`, value: [...(await readTxMonth(m)), t] }])) {
+        toast({ tone: "danger", icon: <IconGasto size={18} />, title: `${x.fijo.nombre} pagado`, detail: `−${mxn(t.monto)} · ${x.credito ? "con tarjeta de crédito" : x.fijo.metodo ? "de tu débito" : "en efectivo"}` });
+      }
+    } catch (e) {
+      toast({ tone: "danger", title: "No se pudo registrar el pago", detail: (e as Error).message });
+    }
+  }
 
   // Gastos por categoría del mes (top 5 + resto)
   const cats = Object.entries(
@@ -48,7 +71,7 @@ export default function Resumen() {
 
   // Lo que vence cada mes en tarjetas
   const vence = new Map<string, number>();
-  for (const c of db.cards) {
+  for (const c of creditos(db.cards)) {
     for (const r of projectCuts(c, db.msi, db.plan?.cardId === c.id ? db.plan.comprasEstimadas : 0, 7)) {
       const k = monthKey(r.limite);
       vence.set(k, (vence.get(k) ?? 0) + r.total);
@@ -74,6 +97,8 @@ export default function Resumen() {
   return (
     <>
       <PageHeader title="Resumen" sub={fdate(today)} />
+
+      <DisponibleCard />
 
       {vacio && (
         <Empty>
@@ -104,9 +129,23 @@ export default function Resumen() {
           <Stat label="Deuda en tarjetas" value={<AnimatedNumber value={deudaTarjetas} tone={{ up: "danger", down: "ok" }} />} sub="Saldo al corte menos tus abonos" />
           <Stat label="Saldo de créditos" value={<AnimatedNumber value={prestamos} tone={{ up: "danger", down: "ok" }} />} sub={`${db.loans.length} crédito${db.loans.length === 1 ? "" : "s"}`} />
           <Stat label={`Ingresos ${mesCorto(mes)}`} value={txs ? <AnimatedNumber value={actual.ing} tone="ok" /> : <Skeleton className="mt-1 h-7 w-28" />} tone="ok" />
-          <Stat label={`Egresos ${mesCorto(mes)}`} value={txs ? <AnimatedNumber value={actual.gas} tone="danger" /> : <Skeleton className="mt-1 h-7 w-28" />} tone={actual.gas > actual.ing && actual.ing > 0 ? "danger" : undefined} sub={txs ? `Balance ${mxn(actual.ing - actual.gas)}` : undefined} />
+          <Stat
+            label={`Egresos ${mesCorto(mes)}`}
+            value={txs ? <AnimatedNumber value={egresosMes} tone={{ up: "danger", down: "ok" }} /> : <Skeleton className="mt-1 h-7 w-28" />}
+            tone={egresosMes > actual.ing && actual.ing > 0 ? "danger" : undefined}
+            sub={txs ? (
+              <>
+                {fijosPend > 0 && <span className="block">incluye {mxn(fijosPend)} de fijos por pagar</span>}
+                <span className="block">Balance <AnimatedNumber value={actual.ing - egresosMes} tone={{ up: "ok", down: "danger" }} /></span>
+              </>
+            ) : undefined}
+          />
         </div>
       )}
+
+      <section className="mb-6">
+        <FijosLista month={mes} lista={fijosMes} onPagar={pagarFijo} compacto />
+      </section>
 
       {proximos.length > 0 && (
         <Section title="Próximos pagos de tarjetas">

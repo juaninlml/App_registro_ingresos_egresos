@@ -1,4 +1,5 @@
 import { addMonths, daysBetween } from "./dates";
+import { creditos } from "./cuentas";
 import { abonadoDesdeCorte, latestStatement } from "./finance";
 import { loanSummary } from "./loan";
 import { mxn } from "./money";
@@ -23,7 +24,7 @@ function cuando(dias: number): string {
 export function buildAlerts(db: DB, today: ISODate): Alert[] {
   const out: Alert[] = [];
 
-  for (const card of db.cards) {
+  for (const card of creditos(db.cards)) {
     const st = latestStatement(card);
     const nombre = `${card.banco} ${card.nombre}`;
     if (!st) {
