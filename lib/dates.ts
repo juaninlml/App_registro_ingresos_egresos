@@ -85,3 +85,22 @@ const fMonth = new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric"
 export const fdate = (d: ISODate) => fDate.format(parse(d)).replace(/\./g, "");
 export const fshort = (d: ISODate) => fShort.format(parse(d)).replace(/\./g, "");
 export const fmonth = (key: string) => fMonth.format(parse(`${key}-01`));
+
+/** Lunes de la semana (lunes a domingo) que contiene `d`. */
+export function lunesDe(d: ISODate): ISODate {
+  return addDays(d, -((weekday(d) + 6) % 7));
+}
+
+/** "15:07" → "3:07 p. m." */
+export function fhora(h?: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(h ?? "");
+  if (!m) return "";
+  const H = Number(m[1]);
+  return `${H % 12 || 12}:${m[2]} ${H >= 12 ? "p. m." : "a. m."}`;
+}
+
+/** Hora local actual "HH:MM". */
+export function ahoraHM(): string {
+  const n = new Date();
+  return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`;
+}

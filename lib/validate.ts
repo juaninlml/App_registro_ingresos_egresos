@@ -40,7 +40,7 @@ const LOAN: Shape = {
   primerPago: "date", pagoMensual: "num?", ivaPct: "num?", pagosHechos: "int", notas: "str?",
 };
 const PAYMENT: Shape = { id: "str", fecha: "date", monto: "num", targetId: "str", nota: "str?" };
-const TX: Shape = { id: "str", fecha: "date", monto: "num", categoria: "str", nota: "str?", metodo: "str?" };
+const TX: Shape = { id: "str", fecha: "date", monto: "num", categoria: "str", nota: "str?", metodo: "str?", hora: "str?" };
 
 function list(v: unknown, s: Shape, extra?: (o: Record<string, unknown>) => boolean): boolean {
   return (

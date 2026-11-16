@@ -153,3 +153,75 @@ export async function removeTransaction(fecha: string, id: string): Promise<void
   const list = (await (await api(`/api/data/tx:${month}`)).json()) as Transaction[];
   await api(`/api/data/tx:${month}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(list.filter((t) => t.id !== id)) });
 }
+
+/** Movimientos de varios meses, con alta y baja que escriben en el mes que corresponde. */
+export function useTxRange(months: string[]) {
+  const key = months.join(",");
+  const [state, setState] = useState<{ key: string; map: Record<string, Transaction[]> } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const cache = useRef<Record<string, Transaction[]>>({});
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all(months.map((m) => api(`/api/data/tx:${m}`).then((r) => r.json() as Promise<Transaction[]>)))
+      .then((lists) => {
+        if (!alive) return;
+        const map = Object.fromEntries(months.map((m, i) => [m, lists[i]]));
+        cache.current = { ...cache.current, ...map };
+        setState({ key, map });
+        setErr(null);
+      })
+      .catch((e: Error) => alive && setErr(e.message));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  const map = state?.key === key ? state.map : null;
+
+  const put = useCallback(async (month: string, next: Transaction[]) => {
+    const prev = cache.current[month] ?? [];
+    const apply = (list: Transaction[]) => {
+      cache.current = { ...cache.current, [month]: list };
+      setState((s) => (s && month in s.map ? { ...s, map: { ...s.map, [month]: list } } : s));
+    };
+    apply(next);
+    try {
+      await api(`/api/data/tx:${month}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
+      setErr(null);
+      return true;
+    } catch (e) {
+      apply(prev);
+      setErr(`No se guardó: ${(e as Error).message}`);
+      return false;
+    }
+  }, []);
+
+  const lista = useCallback(async (month: string) => {
+    if (!cache.current[month]) cache.current[month] = (await (await api(`/api/data/tx:${month}`)).json()) as Transaction[];
+    return cache.current[month];
+  }, []);
+
+  const add = useCallback(async (t: Transaction) => {
+    const m = t.fecha.slice(0, 7);
+    try {
+      return await put(m, [...(await lista(m)), t]);
+    } catch (e) {
+      setErr((e as Error).message);
+      return false;
+    }
+  }, [put, lista]);
+
+  const remove = useCallback(async (t: Transaction) => {
+    const m = t.fecha.slice(0, 7);
+    try {
+      return await put(m, (await lista(m)).filter((x) => x.id !== t.id));
+    } catch (e) {
+      setErr((e as Error).message);
+      return false;
+    }
+  }, [put, lista]);
+
+  return { map, err, add, remove };
+}

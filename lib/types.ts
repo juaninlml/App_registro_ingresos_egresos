@@ -69,6 +69,7 @@ export interface Transaction {
   categoria: string;
   nota?: string;
   metodo?: string; // "efectivo/débito" o id de tarjeta con la que se pagó
+  hora?: string; // hora de registro local "HH:MM"
   tarjetaId?: string; // en la categoría "Pago de tarjeta": la tarjeta que se paga
 }
 

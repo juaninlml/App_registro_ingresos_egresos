@@ -27,11 +27,11 @@ export function buildAlerts(db: DB, today: ISODate): Alert[] {
     const st = latestStatement(card);
     const nombre = `${card.banco} ${card.nombre}`;
     if (!st) {
-      out.push({ nivel: "info", titulo: `${nombre}: sin estado de cuenta`, detalle: "Registra tu último estado de cuenta para ver fechas y pagos.", href: `/tarjetas/${card.id}` });
+      out.push({ nivel: "info", titulo: `${nombre} · sin estado de cuenta`, detalle: "Sube el PDF para ver fechas y pagos", href: `/tarjetas/${card.id}` });
       continue;
     }
     if (today > addMonths(st.fechaCorte, 1)) {
-      out.push({ nivel: "ambar", titulo: `${nombre}: ya pasó tu nuevo corte`, detalle: `Registra el estado de cuenta posterior al ${fdate(st.fechaCorte)}.`, href: `/tarjetas/${card.id}` });
+      out.push({ nivel: "ambar", titulo: `${nombre} · nuevo corte`, detalle: `Sube el estado de cuenta posterior al ${fdate(st.fechaCorte)}`, href: `/tarjetas/${card.id}` });
     }
     const abonado = abonadoDesdeCorte(card, db.payments, st);
     const faltante = Math.max(0, Math.round((st.pagoNoIntereses - abonado) * 100) / 100);
@@ -40,10 +40,10 @@ export function buildAlerts(db: DB, today: ISODate): Alert[] {
       const nivel = dias < 0 ? "rojo" : dias <= 7 ? "ambar" : "info";
       out.push({
         nivel,
-        titulo: `${nombre}: faltan ${mxn(faltante)}`,
+        titulo: `${nombre} · faltan ${mxn(faltante)}`,
         detalle: dias < 0
-          ? `Venció el ${fdate(st.fechaLimite)} (${cuando(dias)}). Pago para no generar intereses: ${mxn(st.pagoNoIntereses)}.`
-          : `Fecha límite ${fdate(st.fechaLimite)} (${cuando(dias)}). Llevas ${mxn(abonado)} de ${mxn(st.pagoNoIntereses)}.`,
+          ? `Venció el ${fdate(st.fechaLimite)} (${cuando(dias)})`
+          : `Límite ${fdate(st.fechaLimite)} · ${cuando(dias)} · llevas ${mxn(abonado)}`,
         href: `/tarjetas/${card.id}`,
       });
     }
@@ -56,8 +56,8 @@ export function buildAlerts(db: DB, today: ISODate): Alert[] {
     if (dias <= 7) {
       out.push({
         nivel: dias < 0 ? "rojo" : "ambar",
-        titulo: `${loan.nombre}: pago de ${mxn(s.proximo.pago)}`,
-        detalle: `Pago ${s.proximo.n} de ${loan.plazoMeses}, ${dias < 0 ? "venció" : "vence"} el ${fdate(s.proximo.fecha)} (${cuando(dias)}).`,
+        titulo: `${loan.nombre} · pago de ${mxn(s.proximo.pago)}`,
+        detalle: `Pago ${s.proximo.n} de ${loan.plazoMeses} · ${dias < 0 ? "venció" : "vence"} el ${fdate(s.proximo.fecha)} (${cuando(dias)})`,
         href: "/prestamos",
       });
     }
@@ -71,8 +71,8 @@ export function buildAlerts(db: DB, today: ISODate): Alert[] {
       if (w) {
         out.push({
           nivel: "ambar",
-          titulo: "Tu plan de abonos no alcanza para un corte",
-          detalle: `La semana del ${fdate(w.lunes)} vencen ${mxn(w.vence)} y te faltarían ${mxn(w.pendiente)}.`,
+          titulo: `Plan de abonos · faltarían ${mxn(w.pendiente)}`,
+          detalle: `Semana del ${fdate(w.lunes)} vencen ${mxn(w.vence)}`,
           href: "/plan",
         });
       }

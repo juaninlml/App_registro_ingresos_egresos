@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useData } from "@/components/DataProvider";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader } from "@/components/ui";
 import { daysBetween, fdate } from "@/lib/dates";
-import { abonadoDesdeCorte, latestStatement } from "@/lib/finance";
+import { abonadoDesdeCorte, deudaActual, latestStatement } from "@/lib/finance";
 import { mxn, uid } from "@/lib/money";
 import type { Card as CardT } from "@/lib/types";
 
@@ -58,8 +58,8 @@ export default function Tarjetas() {
                   </div>
                   {st ? (
                     <div className="mt-3 text-sm">
-                      <div className="text-muted">Saldo total</div>
-                      <div className="num text-lg font-semibold">{mxn(st.saldoTotal)}</div>
+                      <div className="text-muted">Deuda actual</div>
+                      <div className="num text-lg font-semibold">{mxn(deudaActual(c, db.payments, st))}</div>
                       <div className="mt-1 text-xs text-muted">Falta {mxn(falta)} · límite {fdate(st.fechaLimite)}</div>
                     </div>
                   ) : (
