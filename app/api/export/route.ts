@@ -5,7 +5,7 @@ export async function GET() {
   const denied = await requireAuth();
   if (denied) return denied;
   try {
-    const [db, tx] = await Promise.all([readAll(), allTxMonths()]);
+    const [{ db }, tx] = await Promise.all([readAll(), allTxMonths()]);
     const stamp = new Date().toISOString().slice(0, 10);
     const body = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), ...db, tx }, null, 2);
     return new Response(body, {

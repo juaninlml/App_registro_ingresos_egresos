@@ -25,7 +25,7 @@ const close = (a: number, b: number) => Math.abs(a - b) < 0.015;
 
 /** Sin `card`, crea una tarjeta nueva a partir del estado de cuenta. */
 export function ImportStatement({ card, open, onClose, onCreated }: { card: Card | null; open: boolean; onClose: () => void; onCreated?: (id: string) => void }) {
-  const { db, save } = useData();
+  const { db, commit } = useData();
   const input = useRef<HTMLInputElement>(null);
   const [fase, setFase] = useState<"elegir" | "leyendo" | "revisar">("elegir");
   const [estado, setEstado] = useState("");
@@ -125,10 +125,13 @@ export function ImportStatement({ card, open, onClose, onCreated }: { card: Card
       if (r.existenteId) msi = msi.map((x) => (x.id === r.existenteId ? { ...m, id: x.id } : x));
       else msi.push({ ...m, id: uid() });
     }
-    const ok1 = await save("cards", card ? db.cards.map((c) => (c.id === card.id ? nuevaCard : c)) : [...db.cards, nuevaCard]);
-    const ok2 = ok1 && (await save("msi", msi));
+    // tarjeta (con el nuevo estado de cuenta) y MSI se guardan juntos
+    const ok = await commit([
+      { key: "cards", value: card ? db.cards.map((c) => (c.id === card.id ? nuevaCard : c)) : [...db.cards, nuevaCard] },
+      { key: "msi", value: msi },
+    ]);
     setGuardando(false);
-    if (ok1 && ok2) {
+    if (ok) {
       cerrar();
       if (!card) onCreated?.(cardId);
     }

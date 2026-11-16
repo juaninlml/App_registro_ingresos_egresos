@@ -24,6 +24,8 @@ async function db() {
       value jsonb NOT NULL,
       expires_at timestamptz
     )`)
+    // `rev` = versión de cada llave, para detectar escrituras desde otro dispositivo
+    .then(() => q.query(`ALTER TABLE kv ADD COLUMN IF NOT EXISTS rev bigint NOT NULL DEFAULT 0`))
     .then(() => undefined)
     .catch((e) => {
       ready = null;
@@ -47,6 +49,61 @@ export async function mget<T = unknown>(keys: string[]): Promise<(T | null)[]> {
   const rows = await q.query(`SELECT key, value FROM kv WHERE key = ANY($1) AND ${LIVE}`, [keys]);
   const m = new Map(rows.map((r) => [r.key as string, r.value as T]));
   return keys.map((k) => m.get(k) ?? null);
+}
+
+/** Valores y versiones de varias llaves (versión 0 = la llave aún no existe). */
+export async function mgetWithRev<T = unknown>(keys: string[]): Promise<{ value: T | null; rev: number }[]> {
+  if (!keys.length) return [];
+  const q = await db();
+  const rows = await q.query(`SELECT key, value, rev FROM kv WHERE key = ANY($1) AND ${LIVE}`, [keys]);
+  const m = new Map(rows.map((r) => [r.key as string, { value: r.value as T, rev: Number(r.rev) }]));
+  return keys.map((k) => m.get(k) ?? { value: null, rev: 0 });
+}
+
+export interface Write {
+  key: string;
+  value: unknown;
+  /** Versión que tenía el cliente al leer; si no coincide con la actual no se escribe nada. Sin `rev` se sobrescribe. */
+  rev?: number;
+}
+
+export type CommitResult = { ok: true; revs: Record<string, number> } | { ok: false; conflicts: string[] };
+
+const WRITE_LOCK = 7_316_001; // candado de transacción: las escrituras de datos van de una en una
+
+/**
+ * Escribe varias llaves en una sola transacción: o se guardan todas o ninguna.
+ * Si alguna `rev` no coincide con la guardada (otro dispositivo la cambió), no escribe nada y avisa.
+ */
+export async function commit(writes: Write[]): Promise<CommitResult> {
+  const byKey = new Map(writes.map((w) => [w.key, w])); // la última escritura de cada llave gana
+  const input = [...byKey.values()].map((w) => ({ key: w.key, value: JSON.stringify(w.value ?? null), rev: w.rev ?? null }));
+  if (!input.length) return { ok: true, revs: {} };
+  const q = await db();
+  const [, rows] = await q.transaction([
+    q.query(`SELECT pg_advisory_xact_lock(${WRITE_LOCK})`),
+    q.query(
+      `WITH input AS (
+         SELECT key, value::jsonb AS value, rev FROM jsonb_to_recordset($1::jsonb) AS t(key text, value text, rev bigint)
+       ),
+       conflicts AS (
+         SELECT i.key FROM input i LEFT JOIN kv ON kv.key = i.key
+         WHERE i.rev IS NOT NULL AND COALESCE(kv.rev, 0) <> i.rev
+       ),
+       up AS (
+         INSERT INTO kv (key, value, expires_at, rev)
+         SELECT key, value, NULL, 1 FROM input WHERE NOT EXISTS (SELECT 1 FROM conflicts)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, expires_at = NULL, rev = kv.rev + 1
+         RETURNING key, rev
+       )
+       SELECT COALESCE((SELECT jsonb_agg(key) FROM conflicts), '[]'::jsonb) AS conflicts,
+              COALESCE((SELECT jsonb_object_agg(key, rev) FROM up), '{}'::jsonb) AS revs`,
+      [JSON.stringify(input)],
+    ),
+  ]);
+  const r = rows[0] as { conflicts: string[]; revs: Record<string, number | string> };
+  if (r.conflicts.length) return { ok: false, conflicts: r.conflicts };
+  return { ok: true, revs: Object.fromEntries(Object.entries(r.revs).map(([k, v]) => [k, Number(v)])) };
 }
 
 export async function listByPrefix<T = unknown>(prefix: string): Promise<{ key: string; value: T }[]> {

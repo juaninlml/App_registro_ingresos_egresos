@@ -1,18 +1,42 @@
 "use client";
 import { useState } from "react";
-import { useData } from "@/components/DataProvider";
+import { useData, type Write } from "@/components/DataProvider";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, TableWrap, td, th } from "@/components/ui";
 import { daysBetween, fdate, fshort } from "@/lib/dates";
 import { loanSchedule, loanSummary, pagoCalculado } from "@/lib/loan";
 import { mxn, uid } from "@/lib/money";
-import type { Loan } from "@/lib/types";
+import type { Loan, Payment } from "@/lib/types";
 
 export default function Prestamos() {
-  const { db, save, today } = useData();
+  const { db, save, commit, today } = useData();
   const [edit, setEdit] = useState<Loan | "nuevo" | null>(null);
   const [ver, setVer] = useState<string | null>(null);
 
-  const setLoan = (l: Loan) => save("loans", db.loans.map((x) => (x.id === l.id ? l : x)));
+  const loansCon = (l: Loan) => ({ key: "loans" as const, value: db.loans.map((x) => (x.id === l.id ? l : x)) });
+
+  /** Registra el siguiente pago: sube el contador y guarda el abono, juntos. */
+  const registrarPago = (l: Loan, monto: number) => {
+    const n = l.pagosHechos + 1;
+    const abono: Payment = { id: uid(), fecha: today, monto, destino: "loan", targetId: l.id, nota: `Pago ${n}`, loanPago: n };
+    return commit([loansCon({ ...l, pagosHechos: n }), { key: "payments", value: [...db.payments, abono] }]);
+  };
+
+  /** Deshace el último pago: baja el contador y quita el abono que se registró con él. */
+  const deshacerPago = (l: Loan) => {
+    const n = l.pagosHechos;
+    const deEste = db.payments.filter((p) => p.destino === "loan" && p.targetId === l.id);
+    // abonos nuevos llevan `loanPago`; los anteriores solo la nota "Pago n"
+    const abono = deEste.find((p) => p.loanPago === n) ?? deEste.filter((p) => p.loanPago === undefined && p.nota === `Pago ${n}`).at(-1);
+    const writes: Write[] = [loansCon({ ...l, pagosHechos: n - 1 })];
+    if (abono) writes.push({ key: "payments", value: db.payments.filter((p) => p !== abono) });
+    return commit(writes);
+  };
+
+  const borrarPrestamo = (l: Loan) =>
+    commit([
+      { key: "loans", value: db.loans.filter((x) => x.id !== l.id) },
+      { key: "payments", value: db.payments.filter((p) => !(p.destino === "loan" && p.targetId === l.id)) },
+    ]);
 
   return (
     <>
@@ -42,17 +66,12 @@ export default function Prestamos() {
                 <div className="mt-1 flex justify-between text-xs text-muted"><span>{l.pagosHechos} de {l.plazoMeses} pagos</span><span>Intereses{l.ivaPct ? " + IVA" : ""} totales: {mxn(s.interesTotal)}</span></div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {s.proximo && (
-                    <Btn variant="primary" small onClick={async () => {
-                      const n = l.pagosHechos + 1;
-                      if (await setLoan({ ...l, pagosHechos: n })) {
-                        await save("payments", [...db.payments, { id: uid(), fecha: today, monto: s.proximo!.pago, destino: "loan", targetId: l.id, nota: `Pago ${n}` }]);
-                      }
-                    }}>Registrar pago {l.pagosHechos + 1}</Btn>
+                    <Btn variant="primary" small onClick={() => void registrarPago(l, s.proximo!.pago)}>Registrar pago {l.pagosHechos + 1}</Btn>
                   )}
-                  {l.pagosHechos > 0 && <Btn small onClick={() => confirm("¿Deshacer el último pago registrado?") && setLoan({ ...l, pagosHechos: l.pagosHechos - 1 })}>Deshacer último</Btn>}
+                  {l.pagosHechos > 0 && <Btn small onClick={() => confirm("¿Deshacer el último pago registrado?") && void deshacerPago(l)}>Deshacer último</Btn>}
                   <Btn small onClick={() => setVer(abierta ? null : l.id)}>{abierta ? "Ocultar tabla" : "Ver amortización"}</Btn>
                   <Btn small onClick={() => setEdit(l)}>Editar</Btn>
-                  <Btn small variant="danger" onClick={() => confirm(`¿Borrar "${l.nombre}"?`) && save("loans", db.loans.filter((x) => x.id !== l.id))}>Borrar</Btn>
+                  <Btn small variant="danger" onClick={() => confirm(`¿Borrar "${l.nombre}"? También se borrarán sus pagos registrados.`) && void borrarPrestamo(l)}>Borrar</Btn>
                 </div>
               </Card>
               {abierta && (

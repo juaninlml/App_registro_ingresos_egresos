@@ -1,11 +1,11 @@
 import { requireAuth } from "@/lib/api-auth";
-import { writeKey } from "@/lib/db";
+import { writeMany, type DataKey } from "@/lib/db";
 import { DB_KEYS } from "@/lib/types";
 import { TX_KEY, validateValue } from "@/lib/validate";
 
 const MAX_BYTES = 4_000_000;
 
-/** Reemplaza las secciones presentes en el respaldo; las que no vengan se dejan como están. */
+/** Reemplaza las secciones presentes en el respaldo (todas juntas); las que no vengan se dejan como están. */
 export async function POST(req: Request) {
   const denied = await requireAuth();
   if (denied) return denied;
@@ -22,13 +22,13 @@ export async function POST(req: Request) {
     return Response.json({ error: "Formato de respaldo no reconocido" }, { status: 400 });
   }
 
-  const writes: [string, unknown][] = [];
+  const writes: { key: DataKey; value: unknown }[] = [];
   for (const key of DB_KEYS) {
     if (!(key in data)) continue;
     if (!validateValue(key, data[key])) {
       return Response.json({ error: `La sección "${key}" no tiene el formato esperado` }, { status: 422 });
     }
-    writes.push([key, data[key]]);
+    writes.push({ key, value: data[key] });
   }
   const tx = data.tx;
   if (tx !== undefined) {
@@ -38,14 +38,16 @@ export async function POST(req: Request) {
       if (!TX_KEY.test(key) || !validateValue(key as `tx:${string}`, list)) {
         return Response.json({ error: `Los movimientos de ${month} no tienen el formato esperado` }, { status: 422 });
       }
-      writes.push([key, list]);
+      writes.push({ key: key as DataKey, value: list });
     }
   }
   if (!writes.length) return Response.json({ error: "El respaldo no contiene datos" }, { status: 400 });
 
   try {
-    for (const [k, v] of writes) await writeKey(k, v);
-    return Response.json({ ok: true, secciones: writes.map(([k]) => k) });
+    // todo el respaldo en una sola transacción: si algo falla no queda a medias
+    const res = await writeMany(writes);
+    if (!("ok" in res) || !res.ok) throw new Error("No se pudo escribir el respaldo");
+    return Response.json({ ok: true, secciones: writes.map((w) => w.key) });
   } catch (e) {
     console.error("import", e);
     return Response.json({ error: "No se pudo guardar el respaldo" }, { status: 500 });

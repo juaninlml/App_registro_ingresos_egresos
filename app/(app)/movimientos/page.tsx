@@ -11,7 +11,7 @@ const corto = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 100
 const suma = (ts: Transaction[], tipo: Transaction["tipo"]) => ts.filter((t) => t.tipo === tipo).reduce((s, t) => s + t.monto, 0);
 
 export default function Movimientos() {
-  const { db, save, today } = useData();
+  const { db, today } = useData();
   const [vista, setVista] = useState<"semana" | "mes">("semana");
   const [ancla, setAncla] = useState(today);
   const [selDia, setSelDia] = useState(today);
@@ -73,24 +73,19 @@ export default function Movimientos() {
       metodo: !esPago && tipo === "gasto" ? f.metodo || undefined : undefined,
       tarjetaId: esPago ? tarjeta : undefined,
     };
-    if (!(await add(t))) return;
-    if (esPago) {
-      const ok = await save("payments", [...db.payments, { id: uid(), fecha, monto: t.monto, destino: "card", targetId: tarjeta, nota: t.nota ?? "Pago desde movimientos", txId: t.id }]);
-      if (!ok) {
-        await remove(t); // sin el abono no se deja el movimiento a medias
-        setMsg("No se pudo registrar el abono a la tarjeta; no se guardó el movimiento.");
-        return;
-      }
-    }
+    // el movimiento y el abono a la tarjeta se guardan juntos: o ambos o ninguno
+    const abono = esPago
+      ? [{ key: "payments" as const, value: [...db.payments, { id: uid(), fecha, monto: t.monto, destino: "card" as const, targetId: tarjeta, nota: t.nota ?? "Pago desde movimientos", txId: t.id }] }]
+      : [];
+    if (!(await add(t, abono))) return;
     setF({ ...f, monto: "", nota: "" });
     setAbierto(false);
   }
 
   async function borrar(t: Transaction) {
     if (!confirm(esPagoTx(t) ? "¿Borrar este pago? También se quitará el abono de la tarjeta." : "¿Borrar este movimiento?")) return;
-    if ((await remove(t)) && db.payments.some((p) => p.txId === t.id)) {
-      await save("payments", db.payments.filter((p) => p.txId !== t.id));
-    }
+    const ligado = db.payments.some((p) => p.txId === t.id);
+    await remove(t, ligado ? [{ key: "payments", value: db.payments.filter((p) => p.txId !== t.id) }] : []);
   }
 
   function Mov({ t }: { t: Transaction }) {

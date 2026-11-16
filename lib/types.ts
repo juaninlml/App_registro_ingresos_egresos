@@ -56,6 +56,7 @@ export interface Payment {
   targetId: string;
   nota?: string;
   txId?: string; // si nació de un movimiento de la categoría "Pago de tarjeta"
+  loanPago?: number; // número de pago del préstamo que registró este abono
 }
 
 /** Categoría especial: crea también el abono a la tarjeta elegida. */

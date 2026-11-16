@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
-import { removeTransaction, useData } from "@/components/DataProvider";
+import { readTxMonth, useData, type Write } from "@/components/DataProvider";
 import { ImportStatement } from "@/components/ImportStatement";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, TableWrap, td, th } from "@/components/ui";
 import { addDays, addMonths, daysBetween, fdate, fshort, isISO, nextBusinessDay } from "@/lib/dates";
@@ -13,7 +13,7 @@ import type { Msi, Payment, Statement } from "@/lib/types";
 export default function TarjetaDetalle() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { db, save, today } = useData();
+  const { db, save, commit, today } = useData();
   const card = db.cards.find((c) => c.id === id);
   const [modal, setModal] = useState<null | "estado" | "abono" | "msi" | "editar" | "pdf">(null);
   const [editMsi, setEditMsi] = useState<Msi | null>(null);
@@ -34,11 +34,45 @@ export default function TarjetaDetalle() {
   const saveCard = (patch: Partial<typeof card>) => save("cards", db.cards.map((c) => (c.id === card.id ? { ...c, ...patch } : c)));
 
   async function borrarTarjeta() {
-    if (!confirm(`¿Borrar ${card!.banco} ${card!.nombre}? También se borrarán sus MSI y abonos.`)) return;
-    await save("msi", db.msi.filter((m) => m.cardId !== card!.id));
-    await save("payments", db.payments.filter((p) => !(p.destino === "card" && p.targetId === card!.id)));
-    if (db.plan?.cardId === card!.id) await save("plan", null);
-    if (await save("cards", db.cards.filter((c) => c.id !== card!.id))) router.replace("/tarjetas");
+    const c = card!;
+    if (!confirm(`¿Borrar ${c.banco} ${c.nombre}? También se borrarán sus MSI y abonos. Los pagos registrados en Movimientos se conservan como gastos.`)) return;
+    const mios = db.payments.filter((p) => p.destino === "card" && p.targetId === c.id);
+    const writes: Write[] = [
+      { key: "msi", value: db.msi.filter((m) => m.cardId !== c.id) },
+      { key: "payments", value: db.payments.filter((p) => !mios.includes(p)) },
+      { key: "cards", value: db.cards.filter((x) => x.id !== c.id) },
+    ];
+    if (db.plan?.cardId === c.id) writes.push({ key: "plan", value: null });
+    // los movimientos de pago a esta tarjeta se quedan, pero ya sin apuntar a una tarjeta que no existe
+    try {
+      for (const month of new Set(mios.filter((p) => p.txId).map((p) => p.fecha.slice(0, 7)))) {
+        const list = await readTxMonth(month);
+        if (list.some((t) => t.tarjetaId === c.id)) {
+          writes.push({ key: `tx:${month}`, value: list.map((t) => (t.tarjetaId === c.id ? { ...t, tarjetaId: undefined } : t)) });
+        }
+      }
+    } catch (e) {
+      alert(`No se pudo borrar: ${(e as Error).message}`);
+      return;
+    }
+    if (await commit(writes)) router.replace("/tarjetas");
+  }
+
+  /** Borra un abono y, si nació en Movimientos, también ese movimiento (todo junto). */
+  async function borrarAbono(p: Payment) {
+    if (!confirm(p.txId ? "¿Borrar este abono? También se quitará el movimiento de pago." : "¿Borrar este abono?")) return;
+    const writes: Write[] = [{ key: "payments", value: db.payments.filter((x) => x.id !== p.id) }];
+    if (p.txId) {
+      const month = p.fecha.slice(0, 7);
+      try {
+        const list = await readTxMonth(month);
+        if (list.some((t) => t.id === p.txId)) writes.push({ key: `tx:${month}`, value: list.filter((t) => t.id !== p.txId) });
+      } catch (e) {
+        alert(`No se pudo borrar: ${(e as Error).message}`);
+        return;
+      }
+    }
+    await commit(writes);
   }
 
   return (
@@ -132,11 +166,7 @@ export default function TarjetaDetalle() {
                   <td className={td}>{fdate(p.fecha)}</td>
                   <td className={td}>{mxn(p.monto)}</td>
                   <td className={`${td} text-muted`}>{p.nota ?? ""} {p.txId && <Badge tone="accent">desde movimientos</Badge>}</td>
-                  <td className={td}><Btn small variant="ghost" onClick={async () => {
-                    if (!confirm(p.txId ? "¿Borrar este abono? También se quitará el movimiento de pago." : "¿Borrar este abono?")) return;
-                    if (p.txId) await removeTransaction(p.fecha, p.txId).catch(() => {});
-                    await save("payments", db.payments.filter((x) => x.id !== p.id));
-                  }}>Borrar</Btn></td>
+                  <td className={td}><Btn small variant="ghost" onClick={() => void borrarAbono(p)}>Borrar</Btn></td>
                 </tr>
               ))}
             </tbody>
