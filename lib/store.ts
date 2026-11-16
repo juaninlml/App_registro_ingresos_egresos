@@ -5,7 +5,11 @@ let ready: Promise<void> | null = null;
 
 function conn() {
   if (sql) return sql;
-  const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+  const url =
+    process.env.DATABASE_URL ??
+    process.env.POSTGRES_URL ??
+    process.env.STORAGE_DATABASE_URL ?? // Neon con prefijo "STORAGE" en Vercel
+    process.env.STORAGE_POSTGRES_URL;
   if (!url) throw new Error("Falta la variable DATABASE_URL (cadena de conexión de Neon).");
   sql = neon(url);
   return sql;
