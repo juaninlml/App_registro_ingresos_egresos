@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "public/tesseract/**",
     "scripts/**",
+    // herramientas de terceros (skill de Impeccable)
+    ".claude/**",
   ]),
 ]);
 

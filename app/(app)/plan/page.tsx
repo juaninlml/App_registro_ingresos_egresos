@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { CardVisual } from "@/components/CardVisual";
 import { useData } from "@/components/DataProvider";
-import { Badge, Btn, Card, Empty, Field, Input, NumInput, PageHeader, Section, Stat, TableWrap, cx, td, th } from "@/components/ui";
+import { IconCerrar } from "@/components/icons";
+import { Badge, Btn, Card, Empty, Field, IconBtn, Input, NumInput, PageHeader, Section, Stat, TableWrap, cx, td, th } from "@/components/ui";
 import { fdate, fshort, weekday } from "@/lib/dates";
 import { deudaActual, latestStatement } from "@/lib/finance";
 import Link from "next/link";
@@ -94,7 +95,7 @@ export default function Plan() {
               <li key={s.desde} className="flex items-center justify-between py-2">
                 <span>Desde {fdate(s.desde)}</span>
                 <span className="flex items-center gap-2"><span className="num font-semibold">{mxn(s.monto)}</span>
-                  <Btn small variant="ghost" aria-label="Quitar" onClick={() => plan.semanal.length > 1 && setPlan({ ...plan, semanal: plan.semanal.filter((x) => x.desde !== s.desde) })}>✕</Btn></span>
+                  <IconBtn small label={`Quitar abono desde ${fdate(s.desde)}`} disabled={plan.semanal.length <= 1} onClick={() => setPlan({ ...plan, semanal: plan.semanal.filter((x) => x.desde !== s.desde) })}><IconCerrar size={16} /></IconBtn></span>
               </li>
             ))}
           </ul>
@@ -120,7 +121,7 @@ export default function Plan() {
                 <li key={i} className="flex items-center justify-between py-2">
                   <span>{fdate(x.fecha)}{x.nota ? <span className="text-muted"> · {x.nota}</span> : null}</span>
                   <span className="flex items-center gap-2"><span className="num font-semibold">{mxn(x.monto)}</span>
-                    <Btn small variant="ghost" aria-label="Quitar" onClick={() => setPlan({ ...plan, extras: plan.extras.filter((y) => y !== x) })}>✕</Btn></span>
+                    <IconBtn small label={`Quitar abono extra del ${fdate(x.fecha)}`} onClick={() => setPlan({ ...plan, extras: plan.extras.filter((y) => y !== x) })}><IconCerrar size={16} /></IconBtn></span>
                 </li>
               ))}
             </ul>
@@ -181,7 +182,7 @@ export default function Plan() {
 function SelectorTarjeta({ cards, actual, conPlan, onSelect }: { cards: CardT[]; actual: string; conPlan?: string; onSelect: (id: string) => void }) {
   return (
     <Section title={cards.length > 1 ? "¿De qué tarjeta es el plan?" : "Tarjeta del plan"}>
-      <div role="radiogroup" aria-label="Tarjeta del plan" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      <div role="radiogroup" aria-label="Tarjeta del plan" className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:mx-0 sm:py-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
         {cards.map((c) => {
           const on = c.id === actual;
           return (
@@ -193,14 +194,14 @@ function SelectorTarjeta({ cards, actual, conPlan, onSelect }: { cards: CardT[];
               aria-label={`${c.banco} ${c.nombre}${c.terminacion ? ` terminación ${c.terminacion}` : ""}`}
               onClick={() => onSelect(c.id)}
               className={cx(
-                "relative rounded-2xl p-1 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-                on ? "ring-2 ring-accent" : "opacity-60 hover:opacity-100",
+                "press relative w-44 shrink-0 snap-start rounded-2xl p-1 text-left transition-[opacity,box-shadow] duration-[var(--dur)] sm:w-auto",
+                on ? "ring-2 ring-accent" : "opacity-55 hover:opacity-100",
               )}
             >
               <CardVisual card={c} />
-              <span className="mt-1.5 flex items-center justify-between gap-1 px-1 text-xs">
+              <span className="mt-1.5 flex min-h-6 items-center justify-between gap-1 px-1 text-xs">
                 <span className={cx("truncate", on ? "font-semibold" : "text-muted")}>{c.banco} {c.nombre}</span>
-                {conPlan === c.id && <Badge tone="accent">con plan</Badge>}
+                {conPlan === c.id && <span className="shrink-0 whitespace-nowrap"><Badge tone="accent">con plan</Badge></span>}
               </span>
             </button>
           );

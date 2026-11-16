@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { IconCerrar } from "@/components/icons";
 import { useData } from "@/components/DataProvider";
 import { Btn, Card, Field, Input, PageHeader, Section } from "@/components/ui";
 
@@ -58,7 +59,7 @@ export default function Ajustes() {
               {db.settings[c.k].map((x) => (
                 <span key={x} className="inline-flex items-center gap-1 rounded-full bg-surface-2 py-1 pl-3 pr-1 text-sm">
                   {x}
-                  <button aria-label={`Quitar ${x}`} className="rounded-full px-2 text-muted hover:bg-border" onClick={() => db.settings[c.k].length > 1 && save("settings", { ...db.settings, [c.k]: db.settings[c.k].filter((y) => y !== x) })}>✕</button>
+                  <button type="button" aria-label={`Quitar ${x}`} className="press grid size-7 place-items-center rounded-full text-muted hover:bg-border hover:text-fg" onClick={() => db.settings[c.k].length > 1 && save("settings", { ...db.settings, [c.k]: db.settings[c.k].filter((y) => y !== x) })}><IconCerrar size={14} /></button>
                 </span>
               ))}
             </div>

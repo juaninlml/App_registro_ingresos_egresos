@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useData, type Write } from "@/components/DataProvider";
+import { IconCredito, IconDeshacer, IconMas } from "@/components/icons";
+import { AnimatedNumber, useToast } from "@/components/motion";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, TableWrap, td, th } from "@/components/ui";
 import { daysBetween, fdate, fshort } from "@/lib/dates";
 import { loanSchedule, loanSummary, pagoCalculado } from "@/lib/loan";
@@ -9,6 +11,7 @@ import type { Loan, Payment } from "@/lib/types";
 
 export default function Prestamos() {
   const { db, save, commit, today } = useData();
+  const toast = useToast();
   const [edit, setEdit] = useState<Loan | "nuevo" | null>(null);
   const [ver, setVer] = useState<string | null>(null);
 
@@ -40,7 +43,7 @@ export default function Prestamos() {
 
   return (
     <>
-      <PageHeader title="Créditos personales" sub="Tabla de amortización y pagos" actions={<Btn variant="primary" onClick={() => setEdit("nuevo")}>+ Nuevo crédito</Btn>} />
+      <PageHeader title="Créditos personales" sub="Tabla de amortización y pagos" actions={<Btn variant="primary" onClick={() => setEdit("nuevo")}><IconMas size={18} />Nuevo crédito</Btn>} />
       {!db.loans.length ? (
         <Empty>Agrega tu crédito personal (monto, tasa anual, plazo y fecha del primer pago) para ver la amortización.</Empty>
       ) : (
@@ -53,7 +56,7 @@ export default function Prestamos() {
             <Section key={l.id} title={`${l.banco} · ${l.nombre}`}>
               <Card>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div><div className="text-xs text-muted">Saldo</div><div className="num text-lg font-semibold">{mxn(s.saldo)}</div></div>
+                  <div><div className="text-xs text-muted">Saldo</div><div className="text-lg font-semibold"><AnimatedNumber value={s.saldo} tone={{ up: "danger", down: "ok" }} /></div></div>
                   <div><div className="text-xs text-muted">Pago mensual</div><div className="num text-lg font-semibold">{mxn(s.pago)}</div></div>
                   <div>
                     <div className="text-xs text-muted">Próximo pago</div>
@@ -62,13 +65,21 @@ export default function Prestamos() {
                   </div>
                   <div><div className="text-xs text-muted">Termina</div><div className="font-semibold">{s.fechaTermino ? fshort(s.fechaTermino) : "—"}</div></div>
                 </div>
-                <div className="mt-3"><Progress value={l.pagosHechos} max={l.plazoMeses} /></div>
+                <div className="mt-3"><Progress value={l.pagosHechos} max={l.plazoMeses} label={`Pagos hechos de ${l.nombre}`} /></div>
                 <div className="mt-1 flex justify-between text-xs text-muted"><span>{l.pagosHechos} de {l.plazoMeses} pagos</span><span>Intereses{l.ivaPct ? " + IVA" : ""} totales: {mxn(s.interesTotal)}</span></div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {s.proximo && (
-                    <Btn variant="primary" small onClick={() => void registrarPago(l, s.proximo!.pago)}>Registrar pago {l.pagosHechos + 1}</Btn>
+                    <Btn variant="primary" small onClick={async () => {
+                      const n = l.pagosHechos + 1;
+                      if (await registrarPago(l, s.proximo!.pago)) {
+                        toast({ tone: "accent", icon: <IconCredito size={18} />, title: `Pago ${n} de ${l.plazoMeses} registrado`, detail: `${mxn(s.proximo!.pago)} · ${l.nombre}${n === l.plazoMeses ? " · ¡crédito liquidado!" : ""}` });
+                      }
+                    }}>Registrar pago {l.pagosHechos + 1}</Btn>
                   )}
-                  {l.pagosHechos > 0 && <Btn small onClick={() => confirm("¿Deshacer el último pago registrado?") && void deshacerPago(l)}>Deshacer último</Btn>}
+                  {l.pagosHechos > 0 && <Btn small onClick={async () => {
+                    if (!confirm("¿Deshacer el último pago registrado?")) return;
+                    if (await deshacerPago(l)) toast({ tone: "muted", icon: <IconDeshacer size={18} />, title: `Pago ${l.pagosHechos} deshecho`, detail: l.nombre });
+                  }}>Deshacer último</Btn>}
                   <Btn small onClick={() => setVer(abierta ? null : l.id)}>{abierta ? "Ocultar tabla" : "Ver amortización"}</Btn>
                   <Btn small onClick={() => setEdit(l)}>Editar</Btn>
                   <Btn small variant="danger" onClick={() => confirm(`¿Borrar "${l.nombre}"? También se borrarán sus pagos registrados.`) && void borrarPrestamo(l)}>Borrar</Btn>

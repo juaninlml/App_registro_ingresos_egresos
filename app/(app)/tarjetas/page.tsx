@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BancoColorFields, CardVisual, type BancoColor } from "@/components/CardVisual";
+import { IconMas } from "@/components/icons";
 import { ImportStatement } from "@/components/ImportStatement";
 import { useState } from "react";
 import { useData } from "@/components/DataProvider";
@@ -39,7 +40,7 @@ export default function Tarjetas() {
 
   return (
     <>
-      <PageHeader title="Tarjetas" sub="Santander y otros bancos funcionan igual" actions={<><Btn variant="primary" onClick={() => setPdf(true)}>Crear desde estado de cuenta (PDF)</Btn><Btn onClick={() => setOpen(true)}>+ Nueva tarjeta</Btn></>} />
+      <PageHeader title="Tarjetas" sub="Santander y otros bancos funcionan igual" actions={<><Btn variant="primary" onClick={() => setPdf(true)}>Crear desde estado de cuenta (PDF)</Btn><Btn onClick={() => setOpen(true)}><IconMas size={18} />Nueva tarjeta</Btn></>} />
       {!db.cards.length ? (
         <Empty>Sube el PDF de tu estado de cuenta para crear la tarjeta con sus meses sin intereses, o agrégala a mano con «Nueva tarjeta».</Empty>
       ) : (
@@ -51,7 +52,7 @@ export default function Tarjetas() {
             const d = st ? daysBetween(today, st.fechaLimite) : null;
             return (
               <Link key={c.id} href={`/tarjetas/${c.id}`}>
-                <Card className="h-full transition hover:border-accent">
+                <Card className="press h-full transition-colors duration-[var(--dur-fast)] hover:border-accent">
                   <div className="flex items-start justify-between gap-2">
                     <CardVisual card={c} compact className="w-20 shrink-0" />
                     <div className="min-w-0 flex-1">

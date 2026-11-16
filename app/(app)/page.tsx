@@ -3,7 +3,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { useData, useTxMonths } from "@/components/DataProvider";
 import { Bars, Donut, GroupedBars, Legend, LineArea } from "@/components/charts";
-import { Badge, Card, Empty, PageHeader, Section, Stat, cx } from "@/components/ui";
+import { IconAdelante } from "@/components/icons";
+import { AnimatedNumber } from "@/components/motion";
+import { Badge, Card, Empty, PageHeader, Section, Skeleton, Stat, cx } from "@/components/ui";
 import { buildAlerts } from "@/lib/alerts";
 import { addMonthKey, daysBetween, fdate, fmonth, fshort, monthKey } from "@/lib/dates";
 import { abonadoDesdeCorte, deudaActual, latestStatement, projectCuts } from "@/lib/finance";
@@ -84,13 +86,13 @@ export default function Resumen() {
         <Section title={`Avisos (${alerts.length})`} actions={alerts.length > 3 ? <button type="button" onClick={() => setTodas(!todas)} className="text-xs font-medium text-accent underline">{todas ? "Ver menos" : `Ver las ${alerts.length}`}</button> : undefined}>
           <Card className="divide-y divide-border/60 p-0 sm:p-0">
             {visibles.map((a, i) => (
-              <Link key={i} href={a.href} className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2">
+              <Link key={i} href={a.href} className="group flex items-center gap-3 px-4 py-3 transition-colors duration-[var(--dur-fast)] hover:bg-surface-2">
                 <span className={cx("size-2.5 shrink-0 rounded-full", PUNTO[a.nivel])} aria-label={a.nivel === "rojo" ? "Urgente" : a.nivel === "ambar" ? "Atención" : "Info"} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">{a.titulo}</span>
                   <span className="block truncate text-xs text-muted">{a.detalle}</span>
                 </span>
-                <span aria-hidden className="text-muted">›</span>
+                <IconAdelante size={16} className="shrink-0 text-muted transition-transform duration-[var(--dur-fast)] group-hover:translate-x-0.5" />
               </Link>
             ))}
           </Card>
@@ -99,10 +101,10 @@ export default function Resumen() {
 
       {!vacio && (
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Deuda en tarjetas" value={mxn(deudaTarjetas)} sub="Saldo al corte menos tus abonos" />
-          <Stat label="Saldo de créditos" value={mxn(prestamos)} sub={`${db.loans.length} crédito${db.loans.length === 1 ? "" : "s"}`} />
-          <Stat label={`Ingresos ${mesCorto(mes)}`} value={txs ? mxn(actual.ing) : "…"} tone="ok" />
-          <Stat label={`Egresos ${mesCorto(mes)}`} value={txs ? mxn(actual.gas) : "…"} tone={actual.gas > actual.ing && actual.ing > 0 ? "danger" : undefined} sub={txs ? `Balance ${mxn(actual.ing - actual.gas)}` : undefined} />
+          <Stat label="Deuda en tarjetas" value={<AnimatedNumber value={deudaTarjetas} tone={{ up: "danger", down: "ok" }} />} sub="Saldo al corte menos tus abonos" />
+          <Stat label="Saldo de créditos" value={<AnimatedNumber value={prestamos} tone={{ up: "danger", down: "ok" }} />} sub={`${db.loans.length} crédito${db.loans.length === 1 ? "" : "s"}`} />
+          <Stat label={`Ingresos ${mesCorto(mes)}`} value={txs ? <AnimatedNumber value={actual.ing} tone="ok" /> : <Skeleton className="mt-1 h-7 w-28" />} tone="ok" />
+          <Stat label={`Egresos ${mesCorto(mes)}`} value={txs ? <AnimatedNumber value={actual.gas} tone="danger" /> : <Skeleton className="mt-1 h-7 w-28" />} tone={actual.gas > actual.ing && actual.ing > 0 ? "danger" : undefined} sub={txs ? `Balance ${mxn(actual.ing - actual.gas)}` : undefined} />
         </div>
       )}
 
@@ -113,13 +115,13 @@ export default function Resumen() {
               const d = daysBetween(today, st!.fechaLimite);
               return (
                 <Link key={card.id} href={`/tarjetas/${card.id}`}>
-                  <Card className="transition hover:border-accent">
+                  <Card className="transition-colors duration-[var(--dur-fast)] hover:border-accent">
                     <div className="flex items-start justify-between gap-2">
                       <div className="font-medium">{card.banco} {card.nombre}</div>
                       <Badge tone={d < 0 ? "danger" : d <= 7 ? "warn" : "muted"}>{d < 0 ? "Vencido" : d === 0 ? "Hoy" : `${d} d`}</Badge>
                     </div>
                     <div className="num mt-2 text-xl font-semibold">{mxn(falta)}</div>
-                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2"><div className="h-full rounded-full bg-ok" style={{ width: `${Math.min(100, (abonado / (st!.pagoNoIntereses || 1)) * 100)}%` }} /></div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2"><div className="bar-fill h-full rounded-full bg-ok" style={{ transform: `scaleX(${Math.min(1, abonado / (st!.pagoNoIntereses || 1))})` }} /></div>
                     <div className="mt-1 text-xs text-muted">abonado {mxn(abonado)} de {mxn(st!.pagoNoIntereses)} · límite {fdate(st!.fechaLimite)}</div>
                   </Card>
                 </Link>
@@ -133,12 +135,12 @@ export default function Resumen() {
         <Card>
           <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Ingresos y egresos · 6 meses</h2><Link href="/movimientos" className="text-xs font-medium text-accent underline">Ver movimientos</Link></div>
           <Legend items={[{ color: "var(--ok)", label: "Ingresos" }, { color: "var(--danger)", label: "Egresos" }]} />
-          {txs ? <GroupedBars data={[porMes.map((x) => x.ing), porMes.map((x) => x.gas)]} labels={porMes.map((x) => mesCorto(x.m))} colors={["var(--ok)", "var(--danger)"]} aria="Ingresos y egresos de los últimos seis meses" /> : <p className="py-10 text-center text-sm text-muted">Cargando…</p>}
+          {txs ? <GroupedBars data={[porMes.map((x) => x.ing), porMes.map((x) => x.gas)]} labels={porMes.map((x) => mesCorto(x.m))} colors={["var(--ok)", "var(--danger)"]} aria="Ingresos y egresos de los últimos seis meses" /> : <Skeleton className="h-40" />}
         </Card>
 
         <Card>
           <h2 className="mb-3 text-sm font-semibold capitalize">En qué gastas · {fmonth(mes)}</h2>
-          {donut.length ? <Donut items={donut} aria={`Gastos por categoría de ${fmonth(mes)}`} /> : <p className="py-10 text-center text-sm text-muted">{txs ? "Sin gastos este mes." : "Cargando…"}</p>}
+          {donut.length ? <Donut items={donut} aria={`Gastos por categoría de ${fmonth(mes)}`} /> : (txs ? <p className="py-10 text-center text-sm text-muted">Sin gastos este mes.</p> : <Skeleton className="h-40" />)}
         </Card>
 
         {venceMeses.length > 0 && (

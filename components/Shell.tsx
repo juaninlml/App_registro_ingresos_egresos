@@ -3,16 +3,32 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useData } from "./DataProvider";
-import { cx } from "./ui";
+import { IconAjustes, IconCredito, IconMovimientos, IconPlan, IconResumen, IconSalir, IconTarjeta } from "./icons";
+import { ToastProvider } from "./motion";
+import { Skeleton, cx } from "./ui";
 
 const NAV = [
-  { href: "/", label: "Resumen", icon: "◧" },
-  { href: "/tarjetas", label: "Tarjetas", icon: "▭" },
-  { href: "/plan", label: "Plan", icon: "☰" },
-  { href: "/movimientos", label: "Movimientos", icon: "±" },
-  { href: "/prestamos", label: "Créditos", icon: "◎" },
-  { href: "/ajustes", label: "Ajustes", icon: "⚙" },
+  { href: "/", label: "Resumen", Icon: IconResumen },
+  { href: "/tarjetas", label: "Tarjetas", Icon: IconTarjeta },
+  { href: "/plan", label: "Plan", Icon: IconPlan },
+  { href: "/movimientos", label: "Movimientos", Icon: IconMovimientos },
+  { href: "/prestamos", label: "Créditos", Icon: IconCredito },
+  { href: "/ajustes", label: "Ajustes", Icon: IconAjustes },
 ];
+
+/** Esqueleto de una página mientras llegan los datos. */
+function Cargando() {
+  return (
+    <div role="status" aria-label="Cargando tus datos">
+      <Skeleton className="mb-2 h-7 w-40" />
+      <Skeleton className="mb-6 h-4 w-28" />
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+      </div>
+      <Skeleton className="h-56 rounded-2xl" />
+    </div>
+  );
+}
 
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
@@ -26,6 +42,7 @@ export function Shell({ children }: { children: ReactNode }) {
   }
 
   return (
+    <ToastProvider>
     <div className="min-h-dvh md:flex">
       <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col border-r border-border bg-surface p-4 md:flex">
         <div className="mb-6 px-2 text-lg font-semibold tracking-tight">Mis Finanzas</div>
@@ -34,14 +51,15 @@ export function Shell({ children }: { children: ReactNode }) {
             <Link
               key={n.href}
               href={n.href}
-              className={cx("flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium", active(n.href) ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2")}
+              aria-current={active(n.href) ? "page" : undefined}
+              className={cx("press flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium", active(n.href) ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}
             >
-              <span aria-hidden className="w-5 text-center">{n.icon}</span>
+              <n.Icon size={18} />
               {n.label}
             </Link>
           ))}
         </nav>
-        <button onClick={salir} className="rounded-xl px-3 py-2 text-left text-sm text-muted hover:bg-surface-2">Cerrar sesión</button>
+        <button onClick={salir} className="press flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-muted hover:bg-surface-2 hover:text-fg"><IconSalir size={18} />Cerrar sesión</button>
       </aside>
 
       <main className="min-w-0 flex-1 px-4 pb-28 pt-5 sm:px-6 md:pb-10 md:pt-8">
@@ -52,18 +70,25 @@ export function Shell({ children }: { children: ReactNode }) {
               <button className="font-semibold underline" onClick={() => void reload()}>Reintentar</button>
             </div>
           )}
-          {ready ? children : !error && <p className="py-20 text-center text-sm text-muted">Cargando…</p>}
+          {ready ? children : !error && <Cargando />}
         </div>
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
-        {NAV.map((n) => (
-          <Link key={n.href} href={n.href} className={cx("flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium", active(n.href) ? "text-accent" : "text-muted")}>
-            <span aria-hidden className="text-lg leading-none">{n.icon}</span>
-            {n.label}
-          </Link>
-        ))}
+        {NAV.map((n) => {
+          const on = active(n.href);
+          return (
+            <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined} className={cx("press flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium", on ? "text-accent" : "text-muted")}>
+              {/* la píldora del activo crece desde el centro */}
+              <span className={cx("grid h-7 w-12 place-items-center rounded-full transition-[background-color,transform] duration-[var(--dur)] ease-[var(--ease-out)]", on ? "scale-100 bg-accent-soft" : "scale-90")}>
+                <n.Icon size={20} />
+              </span>
+              {n.label}
+            </Link>
+          );
+        })}
       </nav>
     </div>
+    </ToastProvider>
   );
 }

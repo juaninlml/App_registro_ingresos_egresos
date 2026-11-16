@@ -73,8 +73,235 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- Superficies del navegador con la paleta de la app ---------- */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --dur-fast: 140ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
+  accent-color: var(--accent);
+  scrollbar-color: var(--border) transparent;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 30%, transparent);
+  color: var(--fg);
+}
+
+input,
+textarea {
+  caret-color: var(--accent);
+}
+
+a {
+  text-underline-offset: 3px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* ---------- Diálogos: entran desde abajo y salen más rápido ---------- */
+dialog {
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
+  transition:
+    opacity var(--dur-fast) var(--ease-in),
+    transform var(--dur-fast) var(--ease-in),
+    overlay var(--dur-fast) allow-discrete,
+    display var(--dur-fast) allow-discrete;
+}
+dialog[open] {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--dur);
+  transition-timing-function: var(--ease-out);
+}
+@starting-style {
+  dialog[open] {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
 dialog::backdrop {
+  background: rgb(0 0 0 / 0);
+  backdrop-filter: blur(0);
+  transition:
+    background var(--dur) var(--ease-out),
+    backdrop-filter var(--dur) var(--ease-out),
+    overlay var(--dur) allow-discrete,
+    display var(--dur) allow-discrete;
+}
+dialog[open]::backdrop {
+  background: rgb(0 0 0 / 0.5);
   backdrop-filter: blur(2px);
+}
+@starting-style {
+  dialog[open]::backdrop {
+    background: rgb(0 0 0 / 0);
+    backdrop-filter: blur(0);
+  }
+}
+
+/* ---------- Movimientos: el dinero "aterriza" ---------- */
+/* Fila nueva: se despliega desde arriba y su fondo se ilumina con el color del tipo */
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+    clip-path: inset(0 0 100% 0 round 12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0 round 12px);
+  }
+}
+@keyframes row-glow {
+  from {
+    background-color: color-mix(in oklab, var(--tone, var(--accent)) 22%, var(--surface));
+  }
+  to {
+    background-color: var(--surface);
+  }
+}
+.row-new {
+  animation:
+    row-in var(--dur-slow) var(--ease-out) both,
+    row-glow 1400ms var(--ease-out) 120ms both;
+}
+/* Fila que se borra: se desvanece y se recorta antes de salir */
+.row-out {
+  pointer-events: none;
+  animation: row-out 200ms var(--ease-in) forwards;
+}
+@keyframes row-out {
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+    clip-path: inset(0 0 0 100% round 12px);
+  }
+}
+
+/* Total que cambia: destello del color del movimiento */
+@keyframes value-flash {
+  0%,
+  45% {
+    color: var(--tone);
+    text-shadow: 0 0 18px color-mix(in oklab, var(--tone) 45%, transparent);
+  }
+  100% {
+    text-shadow: 0 0 0 transparent;
+  }
+}
+.value-flash {
+  animation: value-flash 1300ms var(--ease-out);
+}
+
+/* Avisos (toasts) */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+    filter: blur(4px);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+.toast-in {
+  animation: toast-in var(--dur) var(--ease-out);
+}
+.toast-out {
+  animation: toast-out 160ms var(--ease-in) forwards;
+}
+/* Barra de tiempo restante del aviso */
+@keyframes toast-timer {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* Botones: respuesta inmediata al presionar */
+.press {
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+.press:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+/* Barras de progreso: crecen con transform, no con width */
+.bar-fill {
+  transform-origin: left center;
+  transition: transform 700ms var(--ease-out);
+}
+
+/* Carga: brillo que recorre los bloques vacíos */
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.skeleton {
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--surface-2) 30%, color-mix(in oklab, var(--surface-2) 55%, var(--border)) 50%, var(--surface-2) 70%) 0 0 / 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* Menos movimiento: sin desplazamientos; se conserva el color y la opacidad que confirman la acción */
+@media (prefers-reduced-motion: reduce) {
+  dialog,
+  dialog[open] {
+    transform: none;
+  }
+  @starting-style {
+    dialog[open] {
+      transform: none;
+    }
+  }
+  @keyframes row-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes row-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+    }
+  }
+  .press:active:not(:disabled) {
+    transform: none;
+  }
+  .bar-fill {
+    transition-duration: 1ms;
+  }
+  .skeleton {
+    animation: none;
+  }
 }
 
 /* Evita el zoom automático de iOS al enfocar campos */

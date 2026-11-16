@@ -3,7 +3,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { readTxMonth, useData, type Write } from "@/components/DataProvider";
-import { BancoColorFields, isColorId, type BancoColor } from "@/components/CardVisual";
+import { BancoColorFields, CardVisual, isColorId, type BancoColor } from "@/components/CardVisual";
+import { IconBorrar, IconMas, IconPagoTarjeta } from "@/components/icons";
+import { AnimatedNumber, useToast } from "@/components/motion";
 import { ImportStatement } from "@/components/ImportStatement";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, TableWrap, td, th } from "@/components/ui";
 import { addDays, addMonths, daysBetween, fdate, fshort, isISO, nextBusinessDay } from "@/lib/dates";
@@ -15,6 +17,7 @@ export default function TarjetaDetalle() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { db, save, commit, today } = useData();
+  const toast = useToast();
   const card = db.cards.find((c) => c.id === id);
   const [modal, setModal] = useState<null | "estado" | "abono" | "msi" | "editar" | "pdf">(null);
   const [editMsi, setEditMsi] = useState<Msi | null>(null);
@@ -73,18 +76,21 @@ export default function TarjetaDetalle() {
         return;
       }
     }
-    await commit(writes);
+    if (await commit(writes)) {
+      toast({ tone: "muted", icon: <IconBorrar size={18} />, title: "Abono borrado", detail: `${mxn(p.monto)} del ${fdate(p.fecha)}${p.txId ? " · y su movimiento" : ""}` });
+    }
   }
 
   return (
     <>
       <PageHeader
+        lead={<CardVisual card={card} compact className="w-14 shrink-0" />}
         title={`${card.banco} ${card.nombre}`}
         sub={`${card.terminacion ? `•••• ${card.terminacion} · ` : ""}corte día ${card.diaCorte}${card.limite ? ` · límite ${mxn(card.limite)}` : ""}`}
         actions={
           <>
             <Btn onClick={() => setModal("editar")}>Editar</Btn>
-            <Btn variant="primary" onClick={() => setModal("abono")}>+ Abono</Btn>
+            <Btn variant="primary" onClick={() => setModal("abono")}><IconMas size={18} />Abono</Btn>
           </>
         }
       />
@@ -103,12 +109,12 @@ export default function TarjetaDetalle() {
           </Card>
           <Card>
             <div className="text-xs font-medium text-muted">Abonado desde el corte</div>
-            <div className="num mt-1 text-xl font-semibold text-ok">{mxn(abonado)}</div>
-            <div className="mt-2"><Progress value={abonado} max={st.pagoNoIntereses} /></div>
+            <div className="mt-1 text-xl font-semibold text-ok"><AnimatedNumber value={abonado} tone="ok" /></div>
+            <div className="mt-2"><Progress value={abonado} max={st.pagoNoIntereses} tone="ok" label="Abonado del pago para no generar intereses" /></div>
           </Card>
           <Card>
             <div className="text-xs font-medium text-muted">Falta para el límite</div>
-            <div className={`num mt-1 text-xl font-semibold ${falta > 0 ? "text-danger" : "text-ok"}`}>{mxn(falta)}</div>
+            <div className={`mt-1 text-xl font-semibold ${falta > 0 ? "text-danger" : "text-ok"}`}><AnimatedNumber value={falta} tone={{ up: "danger", down: "ok" }} /></div>
             <div className="mt-0.5 text-xs text-muted">Deuda actual {mxn(deudaActual(card, db.payments, st))} · al corte {mxn(st.saldoTotal)}</div>
           </Card>
         </div>
@@ -123,7 +129,7 @@ export default function TarjetaDetalle() {
         <Link href="/msi"><Btn>Proyección por corte</Btn></Link>
       </div>
 
-      <Section title={`Meses sin intereses (${activos.length} activos)`} actions={<Btn small variant="primary" onClick={() => { setEditMsi(null); setModal("msi"); }}>+ Agregar MSI</Btn>}>
+      <Section title={`Meses sin intereses (${activos.length} activos)`} actions={<Btn small variant="primary" onClick={() => { setEditMsi(null); setModal("msi"); }}><IconMas size={16} />Agregar MSI</Btn>}>
         {!msis.length ? (
           <Empty>Sin cargos a meses.</Empty>
         ) : (
@@ -205,7 +211,10 @@ export default function TarjetaDetalle() {
         if (await saveCard({ statements: [...rest, s] })) setModal(null);
       }} diaCorte={card.diaCorte} ultimo={st} />
       <AbonoModal open={modal === "abono"} onClose={() => setModal(null)} today={today} onSave={async (p) => {
-        if (await save("payments", [...db.payments, { ...p, id: uid(), destino: "card", targetId: card.id }])) setModal(null);
+        if (await save("payments", [...db.payments, { ...p, id: uid(), destino: "card", targetId: card.id }])) {
+          setModal(null);
+          toast({ tone: "accent", icon: <IconPagoTarjeta size={18} />, title: `Abono a ${card.banco} ${card.nombre} registrado`, detail: `${mxn(p.monto)} · ${fdate(p.fecha)}` });
+        }
       }} />
       <MsiModal open={modal === "msi"} onClose={() => setModal(null)} edit={editMsi} today={today} sugerir={(f) => primerCorteSugerido(card, f)} onSave={async (m) => {
         const next = editMsi ? db.msi.map((x) => (x.id === editMsi.id ? { ...m, id: editMsi.id, cardId: card.id } : x)) : [...db.msi, { ...m, id: uid(), cardId: card.id }];
