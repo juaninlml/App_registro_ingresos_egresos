@@ -1,6 +1,6 @@
 import * as OTPAuth from "otpauth";
 
-const ISSUER = "Mis Finanzas";
+const ISSUER = "Kakeibo";
 
 export function newSecretBase32(): string {
   return new OTPAuth.Secret({ size: 20 }).base32;
@@ -9,7 +9,7 @@ export function newSecretBase32(): string {
 function build(secretBase32: string): OTPAuth.TOTP {
   return new OTPAuth.TOTP({
     issuer: ISSUER,
-    label: "Mis Finanzas",
+    label: "Kakeibo",
     algorithm: "SHA1",
     digits: 6,
     period: 30,

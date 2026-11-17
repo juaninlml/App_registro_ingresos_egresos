@@ -1,4 +1,4 @@
-# Mis Finanzas
+# Kakeibo · 家計簿 Finance Sync
 
 App personal (Next.js + React + Neon Postgres) para llevar:
 

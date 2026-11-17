@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useData } from "./DataProvider";
 import { IconAjustes, IconCredito, IconMovimientos, IconPlan, IconResumen, IconSalir, IconTarjeta } from "./icons";
+import { Logo } from "./Logo";
 import { ToastProvider } from "./motion";
 import { Skeleton, cx } from "./ui";
 
@@ -45,14 +46,14 @@ export function Shell({ children }: { children: ReactNode }) {
     <ToastProvider>
     <div className="min-h-dvh md:flex">
       <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col border-r border-border bg-surface p-4 md:flex">
-        <div className="mb-6 px-2 text-lg font-semibold tracking-tight">Mis Finanzas</div>
+        <Logo size="sm" className="mb-7 px-1" />
         <nav className="flex flex-1 flex-col gap-1">
           {NAV.map((n) => (
             <Link
               key={n.href}
               href={n.href}
               aria-current={active(n.href) ? "page" : undefined}
-              className={cx("press flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium", active(n.href) ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}
+              className={cx("press flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium", active(n.href) ? "bg-accent-soft text-accent-text" : "text-muted hover:bg-surface-2 hover:text-fg")}
             >
               <n.Icon size={18} />
               {n.label}
@@ -78,7 +79,7 @@ export function Shell({ children }: { children: ReactNode }) {
         {NAV.map((n) => {
           const on = active(n.href);
           return (
-            <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined} className={cx("press flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium", on ? "text-accent" : "text-muted")}>
+            <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined} className={cx("press flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium", on ? "text-accent-text" : "text-muted")}>
               {/* la píldora del activo crece desde el centro */}
               <span className={cx("grid h-7 w-12 place-items-center rounded-full transition-[background-color,transform] duration-[var(--dur)] ease-[var(--ease-out)]", on ? "scale-100 bg-accent-soft" : "scale-90")}>
                 <n.Icon size={20} />

@@ -25,7 +25,7 @@ export default function TarjetaDetalle() {
   const [editMsi, setEditMsi] = useState<Msi | null>(null);
 
   if (!card) {
-    return <Empty>No se encontró la tarjeta. <Link href="/tarjetas" className="font-medium text-accent underline">Volver</Link></Empty>;
+    return <Empty>No se encontró la tarjeta. <Link href="/tarjetas" className="font-medium text-accent-text underline">Volver</Link></Empty>;
   }
   if (esDebito(card)) return <DebitoDetalle card={card} />;
   const st = latestStatement(card);
@@ -214,9 +214,11 @@ export default function TarjetaDetalle() {
         if (await saveCard({ statements: [...rest, s] })) setModal(null);
       }} diaCorte={card.diaCorte} ultimo={st} />
       <AbonoModal open={modal === "abono"} onClose={() => setModal(null)} today={today} onSave={async (p) => {
+        setModal(null); // se cierra al instante para ver cómo suben el abonado y la barra
         if (await save("payments", [...db.payments, { ...p, id: uid(), destino: "card", targetId: card.id }])) {
-          setModal(null);
           toast({ tone: "accent", icon: <IconPagoTarjeta size={18} />, title: `Abono a ${card.banco} ${card.nombre} registrado`, detail: `${mxn(p.monto)} · ${fdate(p.fecha)}` });
+        } else {
+          toast({ tone: "danger", title: "No se guardó el abono", detail: `${mxn(p.monto)} · revisa tu conexión e intenta de nuevo` });
         }
       }} />
       <MsiModal open={modal === "msi"} onClose={() => setModal(null)} edit={editMsi} today={today} sugerir={(f) => primerCorteSugerido(card, f)} onSave={async (m) => {

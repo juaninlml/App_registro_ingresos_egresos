@@ -130,14 +130,21 @@ export default function Movimientos() {
     const abono = esPago
       ? [{ key: "payments" as const, value: [...db.payments, { id: uid(), fecha, monto: t.monto, destino: "card" as const, targetId: tarjeta, nota: t.nota ?? "Pago desde movimientos", txId: t.id }] }]
       : [];
+    // el formulario se cierra al instante para que se vea llegar el movimiento; si no se guarda, se reabre con los datos
+    const antes = f;
+    setAbierto(false);
+    setF({ ...f, monto: "", nota: "" });
     setGuardando(true);
     marcar(setRecientes, t.id, 2200);
     if (fecha >= lunes && fecha <= addDays(lunes, 6)) setSelDia(fecha); // muestra el día donde aterrizó
     const ok = await add(t, abono);
     setGuardando(false);
-    if (!ok) return;
-    setF({ ...f, monto: "", nota: "" });
-    setAbierto(false);
+    if (!ok) {
+      setF(antes);
+      setMsg("No se pudo guardar. Revisa tu conexión e intenta de nuevo.");
+      setAbierto(true);
+      return;
+    }
     const k = clase(t);
     const Icono = ICONO[k];
     toast({
@@ -194,7 +201,7 @@ export default function Movimientos() {
             {[fhora(t.hora), t.nota, t.metodo ? `${k === "ingreso" ? "En" : k === "pago" ? "Desde" : "Con"} ${nombreTarjeta(t.metodo)}` : null].filter(Boolean).join(" · ") || "Sin hora"}
           </div>
         </div>
-        <div className={cx("num shrink-0 text-sm font-semibold", k === "ingreso" ? "text-ok" : k === "pago" ? "text-accent" : "")}>{t.tipo === "ingreso" ? "+" : "−"}{mxn(t.monto)}</div>
+        <div className={cx("num shrink-0 text-sm font-semibold", k === "ingreso" ? "text-ok" : k === "pago" ? "text-accent-text" : "")}>{t.tipo === "ingreso" ? "+" : "−"}{mxn(t.monto)}</div>
         <IconBtn label={`Borrar ${t.categoria} de ${mxn(t.monto)}`} small onClick={() => void borrar(t)} className="hover:!text-danger"><IconBorrar size={17} /></IconBtn>
       </div>
     );
@@ -293,7 +300,7 @@ export default function Movimientos() {
                   {ts.length ? ts.map(mov) : fijosDia.length ? null : (
                     <div className="py-6 text-center text-sm text-muted">
                       <p>Sin movimientos este día.</p>
-                      <button type="button" onClick={() => irAForm(diaSel)} className="mt-1 font-medium text-accent underline">Registrar uno</button>
+                      <button type="button" onClick={() => irAForm(diaSel)} className="mt-1 font-medium text-accent-text underline">Registrar uno</button>
                     </div>
                   )}
                 </div>
@@ -360,7 +367,7 @@ export default function Movimientos() {
             <div className="col-span-2">
               <Field label="Monto">
                 <span className="relative block">
-                  <span aria-hidden className={cx("pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xl font-semibold", tipo === "ingreso" ? "text-ok" : esPago ? "text-accent" : "text-danger")}>{tipo === "ingreso" ? "+" : "−"}$</span>
+                  <span aria-hidden className={cx("pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xl font-semibold", tipo === "ingreso" ? "text-ok" : esPago ? "text-accent-text" : "text-danger")}>{tipo === "ingreso" ? "+" : "−"}$</span>
                   <NumInput value={f.monto} onChange={(n) => setF({ ...f, monto: n })} min={0.01} required autoFocus placeholder="0.00" className="num !py-3 pl-11 !text-2xl font-semibold" />
                 </span>
               </Field>

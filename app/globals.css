@@ -1,43 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f4f6f8;
-  --surface: #ffffff;
-  --surface-2: #eef1f5;
-  --border: #dde2ea;
-  --fg: #111827;
-  --muted: #5f6b7a;
-  --accent: #0f766e;
+  /* Paleta de Discord con fondos más oscuros. La app es siempre oscura. */
+  --bg: #0e0f11;
+  --surface: #18191c;
+  --surface-2: #222327;
+  --border: #2e3036;
+  --fg: #f2f3f5;
+  --muted: #9ba1ab;
+  --accent: #5865f2; /* blurple */
   --accent-fg: #ffffff;
-  --accent-soft: #d9f1ee;
-  --danger: #b42318;
-  --danger-soft: #fde8e6;
-  --warn: #9a5b00;
-  --warn-soft: #fdf0cf;
-  --ok: #15803d;
-  --ok-soft: #dcf5e4;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0f14;
-    --surface: #131a22;
-    --surface-2: #1b242e;
-    --border: #28323e;
-    --fg: #e8edf3;
-    --muted: #95a2b3;
-    --accent: #2dd4bf;
-    --accent-fg: #04211d;
-    --accent-soft: #0f2f2c;
-    --danger: #f87171;
-    --danger-soft: #3b1618;
-    --warn: #fbbf24;
-    --warn-soft: #3a2a0a;
-    --ok: #4ade80;
-    --ok-soft: #10301c;
-    color-scheme: dark;
-  }
+  --accent-soft: #23264d;
+  --accent-text: #949cf7; /* blurple claro para texto: contraste 7:1 sobre el fondo */
+  --danger: #f2575a; /* rojo Discord, aclarado para leerse sobre fondo oscuro */
+  --danger-soft: #3a191b;
+  --warn: #f0b232; /* amarillo «ausente» */
+  --warn-soft: #3a2c10;
+  --ok: #3ccf7c; /* verde Discord, aclarado para texto */
+  --ok-soft: #11301f;
+  --brand-mint: #5ee6c2; /* menta del logo */
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -50,12 +32,15 @@
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
+  --color-brand-mint: var(--brand-mint);
+  --font-brand: var(--font-montserrat), system-ui, sans-serif;
 }
 
 html {
@@ -169,9 +154,10 @@ dialog[open]::backdrop {
   }
 }
 .row-new {
+  /* empieza justo cuando termina de cerrarse el formulario (~140 ms) */
   animation:
-    row-in var(--dur-slow) var(--ease-out) both,
-    row-glow 1400ms var(--ease-out) 120ms both;
+    row-in var(--dur-slow) var(--ease-out) 120ms both,
+    row-glow 1400ms var(--ease-out) 240ms both;
 }
 /* Fila que se borra: se desvanece y se recorta antes de salir */
 .row-out {
@@ -264,6 +250,40 @@ dialog[open]::backdrop {
   animation: shimmer 1.4s linear infinite;
 }
 
+/* Entrada del logo en la pantalla de acceso: la libreta se abre paso y después aparece el nombre */
+@keyframes logo-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82) rotate(-6deg);
+    filter: blur(6px);
+  }
+}
+@keyframes logo-word-in {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.logo-mark-in {
+  animation: logo-mark-in 620ms var(--ease-out) both;
+}
+.logo-word-in {
+  animation: logo-word-in 620ms var(--ease-out) 180ms both;
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.rise-in {
+  animation: rise-in 500ms var(--ease-out) 320ms both;
+}
+
 /* Menos movimiento: sin desplazamientos; se conserva el color y la opacidad que confirman la acción */
 @media (prefers-reduced-motion: reduce) {
   dialog,
@@ -301,6 +321,17 @@ dialog[open]::backdrop {
   }
   .skeleton {
     animation: none;
+  }
+  .logo-mark-in,
+  .logo-word-in,
+  .rise-in {
+    animation-name: fade-in;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
   }
 }
 

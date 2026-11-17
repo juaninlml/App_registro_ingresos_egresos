@@ -148,7 +148,7 @@ export function ImportStatement({ card, open, onClose, onCreated }: { card: Card
           <p className="text-sm text-muted">
             Sube el PDF y la app leerá fechas, pagos y cargos a meses. Antes de guardar podrás revisar y corregir todo.
           </p>
-          <p className="rounded-xl bg-accent-soft p-3 text-xs text-accent">
+          <p className="rounded-xl bg-accent-soft p-3 text-xs text-accent-text">
             El PDF se lee en tu propio dispositivo: no se envía a ningún servidor ni servicio externo. Tarda alrededor de un minuto y está pensado para estados de cuenta de Santander.
           </p>
           <input ref={input} type="file" accept="application/pdf" onChange={(e) => e.target.files?.[0] && void leer(e.target.files[0])} className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-accent file:px-4 file:py-2 file:text-sm file:font-medium file:text-accent-fg" />

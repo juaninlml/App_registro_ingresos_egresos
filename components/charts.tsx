@@ -4,7 +4,8 @@ import { mxn } from "@/lib/money";
 const W = 320;
 const H = 150;
 const PAD = { l: 6, r: 6, t: 14, b: 20 };
-export const PALETA = ["#2dd4bf", "#60a5fa", "#f59e0b", "#f472b6", "#a78bfa", "#94a3b8"];
+// Colores de Discord (blurple, menta del logo, amarillo, fucsia, verde, gris)
+export const PALETA = ["#5865f2", "#5ee6c2", "#f0b232", "#eb459e", "#3ccf7c", "#80848e"];
 
 const corto = (n: number) => (n >= 100000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
 

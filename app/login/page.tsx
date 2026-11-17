@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 import { Btn } from "@/components/ui";
 
 export default function LoginPage() {
@@ -47,15 +48,16 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center p-4">
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 p-4">
+      <Logo size="lg" animado />
       <form
         onSubmit={(e) => {
           e.preventDefault();
           if (code.length === 6) void enviar(code);
         }}
-        className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm"
+        className="rise-in w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-[0_24px_48px_-24px_rgb(0_0_0/0.6)]"
       >
-        <h1 className="text-xl font-semibold">Mis Finanzas</h1>
+        <h1 className="text-lg font-semibold">Entrar</h1>
         <p className="mt-1 text-sm text-muted">Escribe el código de 6 dígitos de Google Authenticator.</p>
         <input
           ref={input}
@@ -77,7 +79,7 @@ export default function LoginPage() {
         </Btn>
         {setup && (
           <p className="mt-4 text-center text-sm text-muted">
-            Primera vez: <Link href="/setup" className="font-medium text-accent underline">configurar Google Authenticator</Link>
+            Primera vez: <Link href="/setup" className="font-medium text-accent-text underline">configurar Google Authenticator</Link>
           </p>
         )}
       </form>

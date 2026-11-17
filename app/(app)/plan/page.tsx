@@ -151,7 +151,7 @@ export default function Plan() {
 
       <Section title="Registrar un abono">
         <Card className="text-sm text-muted">
-          Los pagos reales se registran en <Link href="/movimientos" className="font-medium text-accent underline">Movimientos</Link> con la categoría «Pago de tarjeta»: ahí se descuentan de la deuda y de esta tabla. Aquí solo se calcula el plan.
+          Los pagos reales se registran en <Link href="/movimientos" className="font-medium text-accent-text underline">Movimientos</Link> con la categoría «Pago de tarjeta»: ahí se descuentan de la deuda y de esta tabla. Aquí solo se calcula el plan.
         </Card>
       </Section>
 

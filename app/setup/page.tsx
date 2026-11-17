@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Logo } from "@/components/Logo";
 import { Btn, Field, Input } from "@/components/ui";
 
 export default function SetupPage() {
@@ -47,8 +48,9 @@ export default function SetupPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-sm">
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 p-4">
+      <Logo size="lg" animado />
+      <div className="rise-in w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-[0_24px_48px_-24px_rgb(0_0_0/0.6)]">
         <h1 className="text-xl font-semibold">Configurar acceso</h1>
         {!qr ? (
           <form onSubmit={generar} className="mt-3 space-y-4">

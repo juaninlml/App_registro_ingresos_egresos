@@ -102,13 +102,13 @@ export default function Resumen() {
 
       {vacio && (
         <Empty>
-          Aún no hay datos. Importa tu respaldo en <Link href="/ajustes" className="font-medium text-accent underline">Ajustes</Link> o crea tu primera{" "}
-          <Link href="/tarjetas" className="font-medium text-accent underline">tarjeta subiendo el PDF de tu estado de cuenta</Link>.
+          Aún no hay datos. Importa tu respaldo en <Link href="/ajustes" className="font-medium text-accent-text underline">Ajustes</Link> o crea tu primera{" "}
+          <Link href="/tarjetas" className="font-medium text-accent-text underline">tarjeta subiendo el PDF de tu estado de cuenta</Link>.
         </Empty>
       )}
 
       {alerts.length > 0 && (
-        <Section title={`Avisos (${alerts.length})`} actions={alerts.length > 3 ? <button type="button" onClick={() => setTodas(!todas)} className="text-xs font-medium text-accent underline">{todas ? "Ver menos" : `Ver las ${alerts.length}`}</button> : undefined}>
+        <Section title={`Avisos (${alerts.length})`} actions={alerts.length > 3 ? <button type="button" onClick={() => setTodas(!todas)} className="text-xs font-medium text-accent-text underline">{todas ? "Ver menos" : `Ver las ${alerts.length}`}</button> : undefined}>
           <Card className="divide-y divide-border/60 p-0 sm:p-0">
             {visibles.map((a, i) => (
               <Link key={i} href={a.href} className="group flex items-center gap-3 px-4 py-3 transition-colors duration-[var(--dur-fast)] hover:bg-surface-2">
@@ -172,7 +172,7 @@ export default function Resumen() {
 
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <Card>
-          <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Ingresos y egresos · 6 meses</h2><Link href="/movimientos" className="text-xs font-medium text-accent underline">Ver movimientos</Link></div>
+          <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Ingresos y egresos · 6 meses</h2><Link href="/movimientos" className="text-xs font-medium text-accent-text underline">Ver movimientos</Link></div>
           <Legend items={[{ color: "var(--ok)", label: "Ingresos" }, { color: "var(--danger)", label: "Egresos" }]} />
           {txs ? <GroupedBars data={[porMes.map((x) => x.ing), porMes.map((x) => x.gas)]} labels={porMes.map((x) => mesCorto(x.m))} colors={["var(--ok)", "var(--danger)"]} aria="Ingresos y egresos de los últimos seis meses" /> : <Skeleton className="h-40" />}
         </Card>
@@ -184,7 +184,7 @@ export default function Resumen() {
 
         {venceMeses.length > 0 && (
           <Card>
-            <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Lo que vence cada mes en tarjetas</h2><Link href="/msi" className="text-xs font-medium text-accent underline">Proyección</Link></div>
+            <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Lo que vence cada mes en tarjetas</h2><Link href="/msi" className="text-xs font-medium text-accent-text underline">Proyección</Link></div>
             <p className="mb-2 text-xs text-muted">Pago para no generar intereses (MSI + compras estimadas).</p>
             <Bars data={venceMeses.map((k) => vence.get(k)!)} labels={venceMeses.map(mesCorto)} color="var(--accent)" aria="Pagos de tarjeta que vencen cada mes" />
           </Card>
@@ -192,7 +192,7 @@ export default function Resumen() {
 
         {deudaSerie && planRes && (
           <Card>
-            <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Deuda con tu plan de abonos</h2><Link href="/plan" className="text-xs font-medium text-accent underline">Plan</Link></div>
+            <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Deuda con tu plan de abonos</h2><Link href="/plan" className="text-xs font-medium text-accent-text underline">Plan</Link></div>
             <p className="mb-2 text-xs text-muted">{planRes.liquidacion ? <>Terminas de pagar el <b className="text-fg">{fdate(planRes.liquidacion.lunes)}</b></> : "Con este plan aún no alcanza a liquidar."}</p>
             <LineArea values={deudaSerie.v} labels={deudaSerie.l} aria="Deuda restante semana a semana según el plan" />
           </Card>

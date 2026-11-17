@@ -132,7 +132,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   onClick={() => { t.action!.onClick(); dismiss(t.id); }}
-                  className="press inline-flex min-h-9 items-center gap-1 rounded-xl px-3 text-sm font-semibold text-accent hover:bg-accent-soft"
+                  className="press inline-flex min-h-9 items-center gap-1 rounded-xl px-3 text-sm font-semibold text-accent-text hover:bg-accent-soft"
                 >
                   <IconDeshacer size={16} />{t.action.label}
                 </button>

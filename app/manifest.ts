@@ -2,13 +2,13 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Mis Finanzas",
-    short_name: "Finanzas",
+    name: "Kakeibo · Finance Sync",
+    short_name: "Kakeibo",
     description: "Control de tarjetas, meses sin intereses, créditos, ingresos y gastos.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f4f6f8",
-    theme_color: "#0f766e",
+    background_color: "#0e0f11",
+    theme_color: "#0e0f11",
     lang: "es-MX",
     icons: [
       { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },

@@ -147,7 +147,7 @@ export function Badge({ children, tone = "muted" }: { children: ReactNode; tone?
     ok: "bg-ok-soft text-ok",
     warn: "bg-warn-soft text-warn",
     danger: "bg-danger-soft text-danger",
-    accent: "bg-accent-soft text-accent",
+    accent: "bg-accent-soft text-accent-text",
   }[tone];
   return <span className={cx("inline-block rounded-full px-2 py-0.5 text-xs font-medium", t)}>{children}</span>;
 }

@@ -140,10 +140,13 @@ export function SaldoModal({ cardId, onClose, disponible }: { cardId: string | n
           e.preventDefault();
           if (monto === "" || !card) return;
           const saldo = { monto: Number(monto), fecha: today, hora: ahoraHM() };
+          // se cierra al instante para ver cómo cambia el saldo
+          onClose();
+          setMonto("");
           if (await save("cards", db.cards.map((c) => (c.id === card.id ? { ...c, saldo } : c)))) {
-            onClose();
-            setMonto("");
             toast({ tone: "accent", title: "Saldo actualizado", detail: `${card.banco} ${card.nombre}: ${mxn(saldo.monto)} al ${fdate(today)}` });
+          } else {
+            toast({ tone: "danger", title: "No se guardó el saldo", detail: "Revisa tu conexión e intenta de nuevo" });
           }
         }}
       >
