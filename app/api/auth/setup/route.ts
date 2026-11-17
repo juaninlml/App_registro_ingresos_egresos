@@ -5,12 +5,13 @@ import * as store from "@/lib/store";
 import { K } from "@/lib/store";
 import { COOKIE, cookieOptions, createSessionToken } from "@/lib/session";
 import { newSecretBase32, otpauthUrl, verifyCode } from "@/lib/totp";
+import { crear, EMAIL, listar, llaveAuth, normalizarEmail, OWNER_ID } from "@/lib/usuarios";
 
 /**
- * Configuración única de Google Authenticator.
- *  1) { action: "start", setupKey }            -> genera el secreto y el QR (queda pendiente 10 min)
- *  2) { action: "confirm", setupKey, code }    -> comprueba el primer código y lo guarda
- * Solo funciona mientras no exista un secreto guardado y exige la clave SETUP_KEY de Vercel.
+ * Configuración inicial de una app nueva: crea la cuenta de quien la administra.
+ *  1) { action: "start", setupKey, email }          -> secreto y QR (pendiente 10 min)
+ *  2) { action: "confirm", setupKey, email, code }  -> comprueba el primer código y crea la cuenta
+ * Solo funciona mientras no haya ninguna cuenta y exige la clave SETUP_KEY de Vercel.
  */
 export async function POST(req: Request) {
   try {
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
         { status: 503 },
       );
     }
-    if (await store.get<string>(K.totp)) {
+    if ((await listar()).length || (await store.get<string>(llaveAuth(OWNER_ID, "totp")))) {
       return NextResponse.json({ error: "El acceso ya está configurado." }, { status: 403 });
     }
 
@@ -34,17 +35,18 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = (await req.json().catch(() => null)) as { action?: string; setupKey?: unknown; code?: unknown } | null;
+    const body = (await req.json().catch(() => null)) as { action?: string; setupKey?: unknown; code?: unknown; email?: unknown } | null;
     if (typeof body?.setupKey !== "string" || !safeEqual(body.setupKey, expected)) {
       await registerFailure(ip);
       return NextResponse.json({ error: "Clave de configuración incorrecta." }, { status: 401 });
     }
+    const email = normalizarEmail(body.email);
+    if (!EMAIL.test(email)) return NextResponse.json({ error: "Escribe un correo válido." }, { status: 400 });
 
     if (body.action === "start") {
       const secret = newSecretBase32();
       await store.set(K.pending, secret, { ex: 600 });
-      const url = otpauthUrl(secret);
-      const qr = await QRCode.toDataURL(url, { width: 280, margin: 1, errorCorrectionLevel: "M" });
+      const qr = await QRCode.toDataURL(otpauthUrl(secret, email), { width: 280, margin: 1, errorCorrectionLevel: "M" });
       return NextResponse.json({ qr, secret });
     }
 
@@ -58,13 +60,14 @@ export async function POST(req: Request) {
         await registerFailure(ip);
         return NextResponse.json({ error: "El código no coincide. Revisa que la hora de tu teléfono sea automática." }, { status: 401 });
       }
-      const saved = await store.set(K.totp, pending, { nx: true });
+      const saved = await store.set(llaveAuth(OWNER_ID, "totp"), pending, { nx: true });
       if (!saved) return NextResponse.json({ error: "El acceso ya está configurado." }, { status: 403 });
+      await crear({ id: OWNER_ID, email, admin: true });
       await store.del(K.pending);
-      await store.set(K.lastStep, step, { ex: 120 });
+      await store.set(llaveAuth(OWNER_ID, "laststep"), step, { ex: 120 });
       await clearFailures(ip);
       const res = NextResponse.json({ ok: true });
-      res.cookies.set(COOKIE, await createSessionToken(), cookieOptions);
+      res.cookies.set(COOKIE, await createSessionToken(OWNER_ID), cookieOptions);
       return res;
     }
 

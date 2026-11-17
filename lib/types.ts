@@ -129,6 +129,15 @@ export interface Settings {
   notasMes?: Record<string, string>;
 }
 
+/** Perfil de quien usa esta copia de la app. */
+export interface Perfil {
+  nombre?: string;
+  /** Correo para recuperar el acceso (por ahora solo se guarda). */
+  correo?: string;
+  /** Foto ya recortada y reducida en el navegador (data URL de 256×256 px). */
+  foto?: string;
+}
+
 export interface DB {
   cards: Card[];
   msi: Msi[];
@@ -137,6 +146,7 @@ export interface DB {
   plan: PlanConfig | null;
   settings: Settings;
   fijos: GastoFijo[];
+  perfil: Perfil | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -145,8 +155,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "Transporte",
     "Comida (despensa)",
     "Comidas fuera",
-    "Comida gatos",
-    "Arena para gatos",
+    "Mascotas",
     "Gimnasio",
     "Suscripciones",
     "Servicios",
@@ -165,7 +174,8 @@ export const EMPTY_DB: DB = {
   plan: null,
   settings: DEFAULT_SETTINGS,
   fijos: [],
+  perfil: null,
 };
 
-export const DB_KEYS = ["cards", "msi", "loans", "payments", "plan", "settings", "fijos"] as const;
+export const DB_KEYS = ["cards", "msi", "loans", "payments", "plan", "settings", "fijos", "perfil"] as const;
 export type DBKey = (typeof DB_KEYS)[number];

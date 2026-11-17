@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { readTxMonth, useData, useTxMonths } from "@/components/DataProvider";
+import { Avatar } from "@/components/Avatar";
 import { DisponibleCard, useComprasCredito } from "@/components/Cuentas";
 import { FijosLista, movimientoDeFijo } from "@/components/Fijos";
 import { PresupuestoMes } from "@/components/Presupuesto";
@@ -107,7 +108,12 @@ export default function Resumen() {
 
   return (
     <>
-      <PageHeader title="Resumen" sub={fdate(today)} actions={<Link href="/cierre"><Btn small><IconLibreta size={16} />Cierre de mes</Btn></Link>} />
+      <PageHeader
+        title={db.perfil?.nombre ? `Hola, ${db.perfil.nombre.split(" ")[0]}` : "Resumen"}
+        sub={fdate(today)}
+        lead={<Link href="/perfil" aria-label="Tu perfil" className="press rounded-full md:hidden"><Avatar perfil={db.perfil} size={44} /></Link>}
+        actions={<Link href="/cierre"><Btn small><IconLibreta size={16} />Cierre de mes</Btn></Link>}
+      />
 
       <DisponibleCard />
 

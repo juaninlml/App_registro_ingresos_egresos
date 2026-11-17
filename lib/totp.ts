@@ -6,10 +6,10 @@ export function newSecretBase32(): string {
   return new OTPAuth.Secret({ size: 20 }).base32;
 }
 
-function build(secretBase32: string): OTPAuth.TOTP {
+function build(secretBase32: string, label = "Kakeibo"): OTPAuth.TOTP {
   return new OTPAuth.TOTP({
     issuer: ISSUER,
-    label: "Kakeibo",
+    label,
     algorithm: "SHA1",
     digits: 6,
     period: 30,
@@ -17,8 +17,9 @@ function build(secretBase32: string): OTPAuth.TOTP {
   });
 }
 
-export function otpauthUrl(secretBase32: string): string {
-  return build(secretBase32).toString();
+/** Enlace del QR; la etiqueta (el correo) distingue varias cuentas en el mismo teléfono. */
+export function otpauthUrl(secretBase32: string, label?: string): string {
+  return build(secretBase32, label || undefined).toString();
 }
 
 /** Devuelve el paso de 30 s en que coincide el código (para bloquear reutilización) o null si es inválido. */

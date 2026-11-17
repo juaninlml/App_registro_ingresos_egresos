@@ -28,3 +28,16 @@ describe("validación del servidor", () => {
     assert.equal(validateValue("fijos", [{ id: "f", nombre: "Renta", monto: 9500, dia: 32, categoria: "Renta" }]), false);
   });
 });
+
+describe("perfil", () => {
+  it("acepta nombre, correo y foto válidos, o perfil vacío", () => {
+    assert.ok(validateValue("perfil", null));
+    assert.ok(validateValue("perfil", { nombre: "Ana", correo: "ana@correo.mx", foto: "data:image/webp;base64,UklGRg==" }));
+  });
+  it("rechaza correos mal formados, fotos que no son imagen y campos extra", () => {
+    assert.equal(validateValue("perfil", { correo: "ana@correo" }), false);
+    assert.equal(validateValue("perfil", { foto: "https://ejemplo.com/foto.jpg" }), false);
+    assert.equal(validateValue("perfil", { foto: "data:image/svg+xml;base64,PHN2Zz4=" }), false);
+    assert.equal(validateValue("perfil", { nombre: "Ana", admin: true }), false);
+  });
+});

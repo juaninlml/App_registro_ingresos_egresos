@@ -47,3 +47,6 @@ next-env.d.ts
 
 # archivos del OCR (se generan con npm install)
 /public/tesseract/
+
+# base local de desarrollo (pglite)
+/.data/

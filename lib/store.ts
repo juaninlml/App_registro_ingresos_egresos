@@ -1,9 +1,45 @@
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
 
-let sql: NeonQueryFunction<false, false> | null = null;
+type Row = Record<string, unknown> & { [k: string]: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+/** Lo mínimo que usamos de la conexión: consultas sueltas y transacciones de varias consultas. */
+interface Sql {
+  query(text: string, params?: unknown[]): Promise<Row[]>;
+  transaction(queries: Promise<Row[]>[]): Promise<Row[][]>;
+}
+
+let sql: Sql | Promise<Sql> | null = null;
 let ready: Promise<void> | null = null;
 
-function conn() {
+/**
+ * Solo para desarrollo local: `DATABASE_URL=pglite:` usa un Postgres en memoria (o `pglite:./.data/pg`
+ * para guardarlo en disco). En Vercel siempre es Neon.
+ */
+async function pglite(dir: string): Promise<Sql> {
+  const g = globalThis as unknown as { __kakeiboPg?: Promise<Sql> };
+  g.__kakeiboPg ??= (async () => {
+    const { PGlite } = await import("@electric-sql/pglite");
+    const pg = new PGlite(dir || undefined);
+    // consultas «perezosas» como las de Neon: se ejecutan al esperarlas o dentro de transaction()
+    type Perezosa = Promise<Row[]> & { text: string; params?: unknown[] };
+    const query = (text: string, params?: unknown[]) => {
+      const lazy = { text, params } as Perezosa;
+      lazy.then = ((ok, ko) => pg.query<Row>(text, params).then((r) => r.rows).then(ok, ko)) as Perezosa["then"];
+      return lazy;
+    };
+    return {
+      query,
+      transaction: (qs) =>
+        pg.transaction(async (tx) => {
+          const out: Row[][] = [];
+          for (const q of qs as Perezosa[]) out.push((await tx.query<Row>(q.text, q.params)).rows);
+          return out;
+        }),
+    };
+  })();
+  return g.__kakeiboPg;
+}
+
+async function conn(): Promise<Sql> {
   if (sql) return sql;
   const url =
     process.env.DATABASE_URL ??
@@ -11,13 +47,18 @@ function conn() {
     process.env.STORAGE_DATABASE_URL ?? // Neon con prefijo "STORAGE" en Vercel
     process.env.STORAGE_POSTGRES_URL;
   if (!url) throw new Error("Falta la variable DATABASE_URL (cadena de conexión de Neon).");
-  sql = neon(url);
+  if (url.startsWith("pglite:")) {
+    if (process.env.NODE_ENV === "production") throw new Error("pglite: es solo para desarrollo local.");
+    sql = pglite(url.slice("pglite:".length));
+    return sql;
+  }
+  sql = neon(url) as unknown as Sql;
   return sql;
 }
 
 /** Tabla única clave → valor JSON, con expiración opcional (sesiones TOTP, contadores de intentos). */
 async function db() {
-  const q = conn();
+  const q = await conn();
   ready ??= q
     .query(`CREATE TABLE IF NOT EXISTS kv (
       key text PRIMARY KEY,
@@ -126,6 +167,13 @@ export async function set(key: string, value: unknown, opts: { ex?: number; nx?:
   return rows.length > 0;
 }
 
+/** Borra todas las llaves que empiezan con el prefijo (al quitar un usuario). */
+export async function delByPrefix(prefix: string): Promise<void> {
+  if (prefix.length < 6) throw new Error("Prefijo demasiado corto");
+  const q = await db();
+  await q.query(`DELETE FROM kv WHERE starts_with(key, $1)`, [prefix]);
+}
+
 export async function del(key: string): Promise<void> {
   const q = await db();
   await q.query(`DELETE FROM kv WHERE key = $1`, [key]);
@@ -157,13 +205,10 @@ export async function purgeExpired(): Promise<void> {
   await q.query(`DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= now()`);
 }
 
+/** Llaves globales. Las de cada usuario (datos y accesos) están en lib/usuarios.ts. */
 export const K = {
-  data: (key: string) => `fin:${key}`,
-  totp: "fin:auth:totp",
-  pending: "fin:auth:pending",
-  lastStep: "fin:auth:laststep",
+  pending: "fin:auth:pending", // QR pendiente de la configuración inicial (/setup)
+  pendingInvite: (invId: string) => `fin:auth:pending:inv:${invId}`, // QR pendiente de un registro por invitación
   failIp: (ip: string) => `fin:auth:fail:ip:${ip}`,
   failAll: "fin:auth:fail:all",
-  recovery: "fin:auth:recovery",
-  pendingReenroll: "fin:auth:pending:reenroll",
 } as const;

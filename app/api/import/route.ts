@@ -1,4 +1,4 @@
-import { requireAuth } from "@/lib/api-auth";
+import { requireUser } from "@/lib/api-auth";
 import { writeMany, type DataKey } from "@/lib/db";
 import { DB_KEYS } from "@/lib/types";
 import { TX_KEY, validateValue } from "@/lib/validate";
@@ -7,8 +7,8 @@ const MAX_BYTES = 4_000_000;
 
 /** Reemplaza las secciones presentes en el respaldo (todas juntas); las que no vengan se dejan como están. */
 export async function POST(req: Request) {
-  const denied = await requireAuth();
-  if (denied) return denied;
+  const u = await requireUser();
+  if (u instanceof Response) return u;
 
   const raw = await req.text();
   if (raw.length > MAX_BYTES) return Response.json({ error: "El archivo es demasiado grande" }, { status: 413 });
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
 
   try {
     // todo el respaldo en una sola transacción: si algo falla no queda a medias
-    const res = await writeMany(writes);
+    const res = await writeMany(u.id, writes);
     if (!("ok" in res) || !res.ok) throw new Error("No se pudo escribir el respaldo");
     return Response.json({ ok: true, secciones: writes.map((w) => w.key) });
   } catch (e) {

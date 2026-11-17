@@ -1,11 +1,11 @@
-import { requireAuth } from "@/lib/api-auth";
+import { requireUser } from "@/lib/api-auth";
 import { allTxMonths, readAll } from "@/lib/db";
 
 export async function GET() {
-  const denied = await requireAuth();
-  if (denied) return denied;
+  const u = await requireUser();
+  if (u instanceof Response) return u;
   try {
-    const [{ db }, tx] = await Promise.all([readAll(), allTxMonths()]);
+    const [{ db }, tx] = await Promise.all([readAll(u.id), allTxMonths(u.id)]);
     const stamp = new Date().toISOString().slice(0, 10);
     const body = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), ...db, tx }, null, 2);
     return new Response(body, {

@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  // Postgres en memoria solo para desarrollo local (DATABASE_URL=pglite:); no se empaqueta
+  serverExternalPackages: ["@electric-sql/pglite"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

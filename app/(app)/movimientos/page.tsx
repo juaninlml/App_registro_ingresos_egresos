@@ -7,7 +7,7 @@ import { FijosLista, movimientoDeFijo } from "@/components/Fijos";
 import { IconAdelante, IconAtras, IconBorrar, IconBuscar, IconGasto, IconIngreso, IconMas, IconPagoTarjeta, IconTransferencia } from "@/components/icons";
 import { AnimatedNumber, Segmented, useToast } from "@/components/motion";
 import { Badge, Btn, Card, Field, IconBtn, Input, Modal, NumInput, PageHeader, Select, Skeleton, Stat, cx } from "@/components/ui";
-import { addDays, addMonths, ahoraHM, fhora, fmesTitulo, fmonth, fshort, lunesDe, monthKey, weekday, ymd } from "@/lib/dates";
+import { addDays, addMonths, ahoraHM, fhora, fmesTitulo, fshort, lunesDe, monthKey, weekday, ymd } from "@/lib/dates";
 import { mxn, uid } from "@/lib/money";
 import { creditos, debitos, esDebito } from "@/lib/cuentas";
 import { esIngresoFijo, fijosDelMes, porCobrar, porPagar, type FijoDelMes } from "@/lib/fijos";

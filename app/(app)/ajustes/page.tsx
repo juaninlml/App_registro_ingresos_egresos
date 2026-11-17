@@ -1,11 +1,14 @@
 "use client";
 import { useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { readTxMonth, useData, type Write } from "@/components/DataProvider";
-import { IconCerrar } from "@/components/icons";
+import Link from "next/link";
+import { Avatar } from "@/components/Avatar";
+import { IconAdelante, IconCerrar } from "@/components/icons";
 import { useToast } from "@/components/motion";
 import { PresupuestoEditor } from "@/components/Presupuesto";
 import { Seguridad } from "@/components/Seguridad";
+import { Usuarios, useEsAdmin } from "@/components/Usuarios";
 import { Btn, Card, Field, Input, Modal, PageHeader, Section } from "@/components/ui";
 import { movimientosCSV } from "@/lib/csv";
 import { PAGO_TARJETA, type Transaction } from "@/lib/types";
@@ -21,9 +24,11 @@ async function leerTodo(): Promise<{ tx: Record<string, Transaction[]> }> {
 
 export default function Ajustes() {
   const { db, save, commit, reload, today } = useData();
-  const router = useRouter();
   const toast = useToast();
-  const recuperacion = useSearchParams().get("recuperacion") === "1";
+  const params = useSearchParams();
+  const recuperacion = params.get("recuperacion") === "1";
+  const bienvenida = params.get("bienvenida") === "1";
+  const esAdmin = useEsAdmin();
   const file = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -120,6 +125,19 @@ export default function Ajustes() {
   return (
     <>
       <PageHeader title="Ajustes" />
+      <Link href="/perfil" className="press mb-6 flex items-center gap-4 rounded-2xl border border-border bg-surface p-4 transition-colors duration-[var(--dur-fast)] hover:border-accent">
+        <Avatar perfil={db.perfil} size={52} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">{db.perfil?.nombre || "Tu perfil"}</span>
+          <span className="block truncate text-sm text-muted">{db.perfil?.correo || "Agrega tu nombre, foto y correo de recuperación"}</span>
+        </span>
+        <IconAdelante size={18} className="shrink-0 text-muted" />
+      </Link>
+      {bienvenida && (
+        <p role="status" className="mb-5 rounded-xl bg-ok-soft px-4 py-3 text-sm text-ok">
+          ¡Bienvenido a Kakeibo! Tu cuenta está lista. Primero genera tus <b>códigos de recuperación</b> (abajo, en Seguridad) y guárdalos; luego agrega tus tarjetas.
+        </p>
+      )}
       {recuperacion && (
         <p role="alert" className="mb-5 rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">
           Entraste con un código de recuperación (ya no se puede volver a usar). En <b>Seguridad → Cambiar teléfono</b> vincula Google Authenticator en tu teléfono nuevo y genera códigos nuevos.
@@ -175,13 +193,19 @@ export default function Ajustes() {
         </Section>
       ))}
 
+      {esAdmin && <Usuarios />}
+
       <Section title="Seguridad">
         <Seguridad />
       </Section>
 
       <Section title="Sesión">
         <Card className="space-y-2">
-          <Btn onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); router.replace("/login"); }}>Cerrar sesión</Btn>
+          <Btn onClick={async () => {
+            await fetch("/api/auth/logout", { method: "POST" });
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- recarga completa a propósito: limpia la memoria de la cuenta anterior
+            window.location.assign("/login");
+          }}>Cerrar sesión</Btn>
           <p className="text-xs text-muted">Para cerrar todas las sesiones abiertas, cambia la variable SESSION_SECRET en Vercel y vuelve a desplegar.</p>
         </Card>
       </Section>

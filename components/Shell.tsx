@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useData } from "./DataProvider";
 import { IconAjustes, IconCredito, IconLibreta, IconMovimientos, IconPlan, IconResumen, IconSalir, IconTarjeta } from "./icons";
+import { Avatar } from "./Avatar";
 import { Logo } from "./Logo";
 import { ToastProvider } from "./motion";
 import { Skeleton, cx } from "./ui";
@@ -34,13 +35,13 @@ function Cargando() {
 
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const router = useRouter();
-  const { error, ready, reload } = useData();
+  const { db, error, ready, reload } = useData();
   const active = (h: string) => (h === "/" ? path === "/" : path === h || path.startsWith(h + "/"));
 
   async function salir() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- recarga completa a propósito: limpia la memoria de la cuenta anterior
+    window.location.assign("/login");
   }
 
   return (
@@ -61,6 +62,17 @@ export function Shell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
+        <Link
+          href="/perfil"
+          aria-current={active("/perfil") ? "page" : undefined}
+          className={cx("press mb-1 flex items-center gap-3 rounded-xl px-2 py-2", active("/perfil") ? "bg-accent-soft" : "hover:bg-surface-2")}
+        >
+          <Avatar perfil={db.perfil} size={34} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold">{db.perfil?.nombre || "Tu perfil"}</span>
+            <span className="block truncate text-xs text-muted">{db.perfil?.correo || "Agrega tu nombre y foto"}</span>
+          </span>
+        </Link>
         <button onClick={salir} className="press flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-muted hover:bg-surface-2 hover:text-fg"><IconSalir size={18} />Cerrar sesión</button>
       </aside>
 

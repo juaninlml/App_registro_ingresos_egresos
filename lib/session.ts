@@ -11,21 +11,24 @@ function secretKey(): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
-export async function createSessionToken(): Promise<string> {
-  return new SignJWT({ role: "owner" })
+/** Sesión firmada con el id del usuario en `sub`. */
+export async function createSessionToken(uid: string): Promise<string> {
+  return new SignJWT({})
     .setProtectedHeader({ alg: "HS256" })
+    .setSubject(uid)
     .setIssuedAt()
     .setExpirationTime(`${SESSION_SECONDS}s`)
     .sign(secretKey());
 }
 
-export async function verifySessionToken(token: string | undefined): Promise<boolean> {
-  if (!token) return false;
+/** Devuelve el id del usuario de la sesión, o null si no es válida (las sesiones de antes de los usuarios no traen id). */
+export async function verifySessionToken(token: string | undefined): Promise<string | null> {
+  if (!token) return null;
   try {
-    await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
-    return true;
+    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
+    return typeof payload.sub === "string" && payload.sub ? payload.sub : null;
   } catch {
-    return false;
+    return null;
   }
 }
 

@@ -36,6 +36,7 @@ class ConflictError extends Error {}
 async function api(path: string, init?: RequestInit) {
   const r = await fetch(path, { ...init, cache: "no-store" });
   if (r.status === 401) {
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- recarga completa a propósito: limpia la memoria de la cuenta anterior
     window.location.assign("/login");
     throw new Error("Sesión expirada");
   }

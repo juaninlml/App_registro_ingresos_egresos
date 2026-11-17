@@ -92,6 +92,18 @@ export function validateValue(key: DBKey | `tx:${string}`, v: unknown): boolean 
     }
     case "fijos":
       return list(v, FIJO, (o) => (o.tipo === undefined || o.tipo === "gasto" || o.tipo === "ingreso") && (o.dia as number) >= 1 && (o.dia as number) <= 31 && (o.monto as number) > 0 && (o.desde === undefined || (typeof o.desde === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(o.desde))));
+    case "perfil": {
+      if (v === null) return true;
+      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+      const p = v as Record<string, unknown>;
+      const extra = Object.keys(p).filter((k) => !["nombre", "correo", "foto"].includes(k));
+      return (
+        !extra.length &&
+        (p.nombre === undefined || (typeof p.nombre === "string" && p.nombre.length <= 60)) &&
+        (p.correo === undefined || (typeof p.correo === "string" && p.correo.length <= 120 && CORREO.test(p.correo))) &&
+        (p.foto === undefined || (typeof p.foto === "string" && p.foto.length <= 300_000 && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(p.foto)))
+      );
+    }
     case "settings": {
       const s = v as Record<string, unknown> | null;
       const numMap = (m: unknown) =>
@@ -108,5 +120,8 @@ export function validateValue(key: DBKey | `tx:${string}`, v: unknown): boolean 
     }
   }
 }
+
+/** Correo con forma razonable (no se verifica que exista). */
+export const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export const TX_KEY = /^tx:\d{4}-(0[1-9]|1[0-2])$/;

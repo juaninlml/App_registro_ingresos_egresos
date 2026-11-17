@@ -1,12 +1,11 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { Btn, Field, Input } from "@/components/ui";
 
 export default function SetupPage() {
-  const router = useRouter();
   const [setupKey, setSetupKey] = useState("");
+  const [email, setEmail] = useState("");
   const [qr, setQr] = useState<{ qr: string; secret: string } | null>(null);
   const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -24,7 +23,7 @@ export default function SetupPage() {
     setBusy(true);
     setErr(null);
     try {
-      setQr(await post({ action: "start", setupKey }));
+      setQr(await post({ action: "start", setupKey, email }));
     } catch (x) {
       setErr((x as Error).message);
     } finally {
@@ -37,9 +36,9 @@ export default function SetupPage() {
     setBusy(true);
     setErr(null);
     try {
-      await post({ action: "confirm", setupKey, code });
-      router.replace("/");
-      router.refresh();
+      await post({ action: "confirm", setupKey, email, code });
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- recarga completa a propósito: limpia la memoria de la cuenta anterior
+      window.location.assign("/");
     } catch (x) {
       setErr((x as Error).message);
     } finally {
@@ -55,13 +54,16 @@ export default function SetupPage() {
         {!qr ? (
           <form onSubmit={generar} className="mt-3 space-y-4">
             <p className="text-sm text-muted">
-              Escribe la variable <code className="rounded bg-surface-2 px-1">SETUP_KEY</code> que definiste en Vercel. Solo se puede usar mientras no exista un Authenticator configurado.
+              Crea la cuenta de quien administra esta app. Escribe la variable <code className="rounded bg-surface-2 px-1">SETUP_KEY</code> que definiste en Vercel; solo funciona mientras no exista ninguna cuenta. Después podrás invitar a otras personas desde Ajustes.
             </p>
+            <Field label="Tu correo" hint="Con él entrarás a la app.">
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+            </Field>
             <Field label="Clave de configuración">
               <Input type="password" value={setupKey} onChange={(e) => setSetupKey(e.target.value)} autoComplete="off" required />
             </Field>
             {err && <p role="alert" className="text-sm text-danger">{err}</p>}
-            <Btn variant="primary" type="submit" disabled={busy || !setupKey} className="w-full">Generar código QR</Btn>
+            <Btn variant="primary" type="submit" disabled={busy || !setupKey || !email} className="w-full">Generar código QR</Btn>
           </form>
         ) : (
           <form onSubmit={confirmar} className="mt-3 space-y-4">

@@ -1,7 +1,7 @@
 import { randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import * as store from "./store";
-import { K } from "./store";
+import { llaveAuth } from "./usuarios";
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
 
@@ -26,7 +26,7 @@ export function normalizar(raw: unknown): string | null {
 const hash = async (codigo: string, salt: Buffer) => (await scrypt(codigo, salt, 32)).toString("base64");
 
 /** Crea códigos nuevos (reemplaza los anteriores) y los devuelve en claro una sola vez. */
-export async function generarCodigos(): Promise<string[]> {
+export async function generarCodigos(uid: string): Promise<string[]> {
   const codigos = Array.from({ length: CANTIDAD }, () => {
     const c = Array.from({ length: 10 }, () => ALFABETO[randomInt(ALFABETO.length)]).join("");
     return `${c.slice(0, 5)}-${c.slice(5)}`;
@@ -34,19 +34,19 @@ export async function generarCodigos(): Promise<string[]> {
   const salt = randomBytes(16);
   const hashes = await Promise.all(codigos.map((c) => hash(c, salt)));
   const guardado: Guardado = { salt: salt.toString("base64"), hashes, creado: new Date().toISOString() };
-  await store.set(K.recovery, guardado);
+  await store.set(llaveAuth(uid, "recovery"), guardado);
   return codigos;
 }
 
-export async function estadoCodigos(): Promise<{ restantes: number; creado: string | null }> {
-  const g = await store.get<Guardado>(K.recovery);
+export async function estadoCodigos(uid: string): Promise<{ restantes: number; creado: string | null }> {
+  const g = await store.get<Guardado>(llaveAuth(uid, "recovery"));
   return { restantes: g?.hashes.length ?? 0, creado: g?.creado ?? null };
 }
 
 /** Si el código es válido lo gasta (no se puede volver a usar) y devuelve true. */
-export async function usarCodigo(raw: unknown): Promise<boolean> {
+export async function usarCodigo(uid: string, raw: unknown): Promise<boolean> {
   const codigo = normalizar(raw);
-  const g = await store.get<Guardado>(K.recovery);
+  const g = await store.get<Guardado>(llaveAuth(uid, "recovery"));
   if (!codigo || !g?.hashes.length) return false;
   const h = Buffer.from(await hash(codigo, Buffer.from(g.salt, "base64")), "base64");
   // se comparan todos en tiempo constante para no revelar cuál coincidió
@@ -56,6 +56,6 @@ export async function usarCodigo(raw: unknown): Promise<boolean> {
     if (b.length === h.length && timingSafeEqual(b, h)) encontrado = i;
   });
   if (encontrado < 0) return false;
-  await store.set(K.recovery, { ...g, hashes: g.hashes.filter((_, i) => i !== encontrado) });
+  await store.set(llaveAuth(uid, "recovery"), { ...g, hashes: g.hashes.filter((_, i) => i !== encontrado) });
   return true;
 }

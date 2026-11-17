@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { COOKIE, verifySessionToken } from "@/lib/session";
 
-const PUBLIC_PATHS = ["/login", "/setup"];
+const PUBLIC_PATHS = ["/login", "/setup", "/registro"];
 
 /**
  * Revisión rápida de sesión antes de servir páginas y APIs. No es la única barrera:
@@ -15,7 +15,7 @@ export async function proxy(request: NextRequest) {
 
   let ok = false;
   try {
-    ok = await verifySessionToken(request.cookies.get(COOKIE)?.value);
+    ok = Boolean(await verifySessionToken(request.cookies.get(COOKIE)?.value));
   } catch {
     ok = false;
   }

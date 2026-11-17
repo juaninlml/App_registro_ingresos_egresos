@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import QRCode from "qrcode";
-import { requireAuth } from "@/lib/api-auth";
+import { requireUser } from "@/lib/api-auth";
 import { clientIp, lockedFor, registerFailure } from "@/lib/guard";
 import * as store from "@/lib/store";
-import { K } from "@/lib/store";
 import { newSecretBase32, otpauthUrl, verifyCode } from "@/lib/totp";
+import { llaveAuth } from "@/lib/usuarios";
 
 /**
  * Cambiar el teléfono de Google Authenticator (requiere sesión, por ejemplo después de entrar con un
@@ -13,8 +13,8 @@ import { newSecretBase32, otpauthUrl, verifyCode } from "@/lib/totp";
  *  2) { action: "confirm", code }   -> si el código del teléfono nuevo es correcto, reemplaza al anterior
  */
 export async function POST(req: Request) {
-  const denied = await requireAuth();
-  if (denied) return denied;
+  const u = await requireUser();
+  if (u instanceof Response) return u;
   try {
     const ip = clientIp(req);
     const wait = await lockedFor(ip);
@@ -25,22 +25,22 @@ export async function POST(req: Request) {
 
     if (body?.action === "start") {
       const secret = newSecretBase32();
-      await store.set(K.pendingReenroll, secret, { ex: 600 });
-      const qr = await QRCode.toDataURL(otpauthUrl(secret), { width: 280, margin: 1, errorCorrectionLevel: "M" });
+      await store.set(llaveAuth(u.id, "pending:reenroll"), secret, { ex: 600 });
+      const qr = await QRCode.toDataURL(otpauthUrl(secret, u.email), { width: 280, margin: 1, errorCorrectionLevel: "M" });
       return NextResponse.json({ qr, secret });
     }
 
     if (body?.action === "confirm") {
-      const pending = await store.get<string>(K.pendingReenroll);
+      const pending = await store.get<string>(llaveAuth(u.id, "pending:reenroll"));
       if (!pending) return NextResponse.json({ error: "El código QR expiró. Genera uno nuevo." }, { status: 410 });
       const step = verifyCode(pending, body.code);
       if (step === null) {
         await registerFailure(ip);
         return NextResponse.json({ error: "El código no coincide. Revisa que la hora de tu teléfono sea automática." }, { status: 401 });
       }
-      await store.set(K.totp, pending);
-      await store.del(K.pendingReenroll);
-      await store.set(K.lastStep, step, { ex: 120 });
+      await store.set(llaveAuth(u.id, "totp"), pending);
+      await store.del(llaveAuth(u.id, "pending:reenroll"));
+      await store.set(llaveAuth(u.id, "laststep"), step, { ex: 120 });
       return NextResponse.json({ ok: true });
     }
 

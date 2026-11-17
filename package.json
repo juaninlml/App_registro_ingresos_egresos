@@ -23,6 +23,7 @@
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.4",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
