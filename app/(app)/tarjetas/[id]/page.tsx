@@ -6,10 +6,11 @@ import { readTxMonth, useData, type Write } from "@/components/DataProvider";
 import { BancoColorFields, CardVisual, isColorId, type BancoColor } from "@/components/CardVisual";
 import { IconBorrar, IconMas, IconPagoTarjeta } from "@/components/icons";
 import { AnimatedNumber, useToast } from "@/components/motion";
+import { useComprasCredito } from "@/components/Cuentas";
 import { DebitoDetalle } from "@/components/DebitoDetalle";
 import { ImportStatement } from "@/components/ImportStatement";
 import { esDebito } from "@/lib/cuentas";
-import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, TableWrap, td, th } from "@/components/ui";
+import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, Skeleton, TableWrap, td, th } from "@/components/ui";
 import { addDays, addMonths, daysBetween, fdate, fshort, isISO, nextBusinessDay } from "@/lib/dates";
 import { abonadoDesdeCorte, deudaActual, latestStatement, msiInfo, primerCorteSugerido } from "@/lib/finance";
 import { mxn, round2, uid } from "@/lib/money";
@@ -23,6 +24,7 @@ export default function TarjetaDetalle() {
   const card = db.cards.find((c) => c.id === id);
   const [modal, setModal] = useState<null | "estado" | "abono" | "msi" | "editar" | "pdf">(null);
   const [editMsi, setEditMsi] = useState<Msi | null>(null);
+  const compras = useComprasCredito();
 
   if (!card) {
     return <Empty>No se encontró la tarjeta. <Link href="/tarjetas" className="font-medium text-accent-text underline">Volver</Link></Empty>;
@@ -31,6 +33,11 @@ export default function TarjetaDetalle() {
   const st = latestStatement(card);
   const abonado = st ? abonadoDesdeCorte(card, db.payments, st) : 0;
   const falta = st ? Math.max(0, round2(st.pagoNoIntereses - abonado)) : 0;
+  // deuda real: lo del corte + compras registradas después − todo lo abonado
+  const misCompras = compras?.[card.id];
+  const comprado = misCompras?.total ?? 0;
+  const abonadoTotal = abonado;
+  const deuda = st ? deudaActual(card, db.payments, st, comprado) : 0;
   const msis = db.msi.filter((m) => m.cardId === card.id);
   const ref = st?.fechaCorte ?? today;
   const infos = msis.map((m) => ({ m, i: msiInfo(m, ref) }));
@@ -118,11 +125,54 @@ export default function TarjetaDetalle() {
           <Card>
             <div className="text-xs font-medium text-muted">Falta para el límite</div>
             <div className={`mt-1 text-xl font-semibold ${falta > 0 ? "text-danger" : "text-ok"}`}><AnimatedNumber value={falta} tone={{ up: "danger", down: "ok" }} /></div>
-            <div className="mt-0.5 text-xs text-muted">Deuda actual {mxn(deudaActual(card, db.payments, st))} · al corte {mxn(st.saldoTotal)}</div>
+            <div className="mt-0.5 text-xs text-muted">Pago del corte del {fshort(st.fechaCorte)}</div>
           </Card>
         </div>
       ) : (
         <div className="mb-6"><Empty>Registra tu primer estado de cuenta para empezar.</Empty></div>
+      )}
+
+      {st && (
+        <Section title="Deuda real">
+          <Card>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="text-xs font-medium text-muted">Deuda actual</div>
+                <div className="mt-1 text-2xl font-semibold">{misCompras ? <AnimatedNumber value={deuda} tone={{ up: "danger", down: "ok" }} /> : <Skeleton className="h-8 w-36" />}</div>
+                <div className="mt-1 text-xs text-muted">
+                  Al corte {mxn(st.saldoTotal)} + compras {mxn(comprado)} − abonos {mxn(abonadoTotal)}
+                </div>
+              </div>
+              {card.limite ? (
+                <div>
+                  <div className="text-xs font-medium text-muted">Crédito disponible</div>
+                  <div className={`mt-1 text-2xl font-semibold ${card.limite - deuda < 0 ? "text-danger" : ""}`}>
+                    {misCompras ? <AnimatedNumber value={round2(card.limite - deuda)} tone={{ up: "ok", down: "danger" }} /> : <Skeleton className="h-8 w-36" />}
+                  </div>
+                  <div className="mt-2"><Progress value={deuda} max={card.limite} tone={deuda / card.limite > 0.8 ? "danger" : "accent"} label="Uso del límite de crédito" /></div>
+                  <div className="mt-1 text-xs text-muted">Usas {Math.round((deuda / card.limite) * 100)}% de {mxn(card.limite)}</div>
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-4 border-t border-border pt-3">
+              <div className="mb-2 text-xs font-semibold text-muted">Compras desde el corte del {fshort(st.fechaCorte)}</div>
+              {!misCompras ? (
+                <Skeleton className="h-16" />
+              ) : !misCompras.lista.length ? (
+                <p className="text-sm text-muted">Los gastos que registres en Movimientos con esta tarjeta aparecen aquí y se suman a la deuda hasta tu siguiente estado de cuenta.</p>
+              ) : (
+                <ul className="divide-y divide-border/60 text-sm">
+                  {[...misCompras.lista].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 15).map((t) => (
+                    <li key={t.id} className="flex items-center justify-between gap-3 py-2">
+                      <span className="min-w-0 truncate"><span className="font-medium">{t.nota || t.categoria}</span> <span className="text-muted">· {fshort(t.fecha)}{t.nota ? ` · ${t.categoria}` : ""}</span></span>
+                      <span className="num shrink-0 font-semibold">−{mxn(t.monto)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Card>
+        </Section>
       )}
 
       <div className="mb-6 flex flex-wrap gap-2">

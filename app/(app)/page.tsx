@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { readTxMonth, useData, useTxMonths } from "@/components/DataProvider";
-import { DisponibleCard } from "@/components/Cuentas";
+import { DisponibleCard, useComprasCredito } from "@/components/Cuentas";
 import { FijosLista, movimientoDeFijo } from "@/components/Fijos";
 import { IconGasto } from "@/components/icons";
 import { useToast } from "@/components/motion";
@@ -29,6 +29,7 @@ export default function Resumen() {
   const meses = Array.from({ length: 6 }, (_, i) => addMonthKey(mes, i - 5));
   const txs = useTxMonths(meses);
   const alerts = buildAlerts(db, today);
+  const compras = useComprasCredito();
   const [todas, setTodas] = useState(false);
 
   const cards = creditos(db.cards).map((card) => {
@@ -36,7 +37,8 @@ export default function Resumen() {
     const abonado = st ? abonadoDesdeCorte(card, db.payments, st) : 0;
     return { card, st, abonado, falta: st ? Math.max(0, st.pagoNoIntereses - abonado) : 0 };
   });
-  const deudaTarjetas = cards.reduce((s, c) => s + (c.st ? deudaActual(c.card, db.payments, c.st) : 0), 0);
+  const deudaTarjetas = cards.reduce((s, c) => s + (c.st ? deudaActual(c.card, db.payments, c.st, compras?.[c.card.id]?.total ?? 0) : 0), 0);
+  const comprasTotal = Object.values(compras ?? {}).reduce((s, c) => s + c.total, 0);
   const prestamos = db.loans.reduce((s, l) => s + loanSummary(l).saldo, 0);
   const proximos = cards.filter((c) => c.st && c.falta > 0).sort((a, b) => a.st!.fechaLimite.localeCompare(b.st!.fechaLimite));
 
@@ -126,7 +128,7 @@ export default function Resumen() {
 
       {!vacio && (
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Deuda en tarjetas" value={<AnimatedNumber value={deudaTarjetas} tone={{ up: "danger", down: "ok" }} />} sub="Saldo al corte menos tus abonos" />
+          <Stat label="Deuda en tarjetas" value={<AnimatedNumber value={deudaTarjetas} tone={{ up: "danger", down: "ok" }} />} sub={comprasTotal > 0 ? <>Al corte + <AnimatedNumber value={comprasTotal} /> en compras − abonos</> : "Saldo al corte menos tus abonos"} />
           <Stat label="Saldo de créditos" value={<AnimatedNumber value={prestamos} tone={{ up: "danger", down: "ok" }} />} sub={`${db.loans.length} crédito${db.loans.length === 1 ? "" : "s"}`} />
           <Stat label={`Ingresos ${mesCorto(mes)}`} value={txs ? <AnimatedNumber value={actual.ing} tone="ok" /> : <Skeleton className="mt-1 h-7 w-28" />} tone="ok" />
           <Stat

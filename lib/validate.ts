@@ -40,7 +40,7 @@ const LOAN: Shape = {
   primerPago: "date", pagoMensual: "num?", ivaPct: "num?", pagosHechos: "int", notas: "str?",
 };
 const PAYMENT: Shape = { id: "str", fecha: "date", monto: "num", targetId: "str", nota: "str?", txId: "str?", loanPago: "int?" };
-const TX: Shape = { id: "str", fecha: "date", monto: "num", categoria: "str", nota: "str?", metodo: "str?", hora: "str?", tarjetaId: "str?", fijoId: "str?" };
+const TX: Shape = { id: "str", fecha: "date", monto: "num", categoria: "str", nota: "str?", metodo: "str?", hora: "str?", tarjetaId: "str?", fijoId: "str?", destinoId: "str?" };
 const FIJO: Shape = { id: "str", nombre: "str", monto: "num", dia: "int", categoria: "str", metodo: "str?" };
 
 function list(v: unknown, s: Shape, extra?: (o: Record<string, unknown>) => boolean): boolean {
@@ -56,7 +56,13 @@ const strList = (v: unknown) => Array.isArray(v) && v.length <= 100 && v.every((
 export function validateValue(key: DBKey | `tx:${string}`, v: unknown): boolean {
   if (key.startsWith("tx:")) {
     const month = key.slice(3);
-    return list(v, TX, (o) => (o.tipo === "ingreso" || o.tipo === "gasto") && String(o.fecha).startsWith(month));
+    return list(
+      v,
+      TX,
+      (o) =>
+        (o.tipo === "ingreso" || o.tipo === "gasto" || (o.tipo === "transferencia" && (o.metodo ?? "") !== (o.destinoId ?? ""))) &&
+        String(o.fecha).startsWith(month),
+    );
   }
   switch (key as DBKey) {
     case "cards":

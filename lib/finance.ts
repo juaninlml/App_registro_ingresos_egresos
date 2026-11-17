@@ -1,6 +1,6 @@
 import { addDays, addMonths, monthsDiff, nextBusinessDay } from "./dates";
 import { round2 } from "./money";
-import type { Card, ISODate, Msi, Payment, Statement } from "./types";
+import type { Card, ISODate, Msi, Payment, Statement, Transaction } from "./types";
 
 export function latestStatement(card: Card): Statement | null {
   if (!card.statements.length) return null;
@@ -123,7 +123,17 @@ export function abonadoDesdeCorte(card: Card, payments: Payment[], st: Statement
   );
 }
 
-/** Deuda total hoy: saldo del último corte menos lo abonado después del corte. */
-export function deudaActual(card: Card, payments: Payment[], st: Statement): number {
-  return round2(Math.max(0, st.saldoTotal - abonadoDesdeCorte(card, payments, st)));
+/**
+ * Gastos registrados en Movimientos con esta tarjeta de crédito después del último corte: todavía no
+ * vienen en el estado de cuenta, pero ya son deuda. Al subir el siguiente estado quedan dentro de su saldo.
+ */
+export function comprasDesdeCorte(card: Card, txs: Transaction[], st: Statement, hasta?: ISODate): Transaction[] {
+  return txs.filter((t) => t.tipo === "gasto" && t.metodo === card.id && t.fecha > st.fechaCorte && (!hasta || t.fecha <= hasta));
+}
+
+export const totalCompras = (ts: Transaction[]) => round2(ts.reduce((s, t) => s + t.monto, 0));
+
+/** Deuda total hoy: saldo del último corte, más las compras hechas después del corte, menos lo abonado. */
+export function deudaActual(card: Card, payments: Payment[], st: Statement, compras = 0): number {
+  return round2(Math.max(0, st.saldoTotal + compras - abonadoDesdeCorte(card, payments, st)));
 }

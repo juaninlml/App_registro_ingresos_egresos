@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { CardVisual } from "@/components/CardVisual";
+import { useComprasCredito } from "@/components/Cuentas";
+import { AnimatedNumber } from "@/components/motion";
 import { useData } from "@/components/DataProvider";
 import { IconCerrar } from "@/components/icons";
 import { Badge, Btn, Card, Empty, Field, IconBtn, Input, NumInput, PageHeader, Section, Stat, TableWrap, cx, td, th } from "@/components/ui";
@@ -20,6 +22,7 @@ export default function Plan() {
   const [nuevoSem, setNuevoSem] = useState({ desde: "", monto: "" as number | "" });
   const [nuevoExtra, setNuevoExtra] = useState({ fecha: "", monto: "" as number | "", nota: "" });
   const [custom, setCustom] = useState<number | "">("");
+  const compras = useComprasCredito();
 
   if (!card) return <><PageHeader title="Plan de abonos" /><Empty>Primero agrega una tarjeta de crédito.</Empty></>;
   const selector = <SelectorTarjeta cards={credito} actual={card.id} conPlan={db.plan?.cardId} onSelect={setSel} />;
@@ -38,7 +41,8 @@ export default function Plan() {
   const guardado = db.plan?.cardId === card.id;
   const setPlan = (p: PlanConfig) => save("plan", p);
   const st = latestStatement(card)!;
-  const deuda = deudaActual(card, db.payments, st);
+  const comprado = compras?.[card.id]?.total ?? 0;
+  const deuda = deudaActual(card, db.payments, st, comprado);
   const sug = sugerencias(plan, card, db.msi, db.payments, today, deuda);
   const sim = custom === "" || Number(custom) <= 0 ? null : buildPlan(conAbono(plan, Number(custom), today), card, db.msi, db.payments, today);
   const simPend = sim ? sim.weeks.filter((w) => w.domingo >= today && w.pendiente > 0.005) : [];
@@ -53,7 +57,7 @@ export default function Plan() {
       {!guardado && <Card className="mb-5 border-warn/40 bg-warn-soft text-sm text-warn">Este plan aún no está guardado. Agrega o cambia cualquier valor para guardarlo.</Card>}
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Deuda actual" value={mxn(deuda)} sub={`Corte ${fshort(st.fechaCorte)}: ${mxn(res.deudaInicial)} − abonos`} />
+        <Stat label="Deuda actual" value={<AnimatedNumber value={deuda} tone={{ up: "danger", down: "ok" }} />} sub={`Corte ${fshort(st.fechaCorte)}: ${mxn(res.deudaInicial)}${comprado > 0 ? ` + ${mxn(comprado)} en compras` : ""} − abonos`} />
         <Stat label="Liquidas el" value={res.liquidacion ? fshort(res.liquidacion.lunes) : "—"} tone={res.liquidacion ? "ok" : "warn"} sub={res.liquidacion ? undefined : "Con este plan aún no alcanza"} />
         <Stat label="Último vencimiento MSI" value={res.ultimoVencimientoMSI ? fshort(res.ultimoVencimientoMSI) : "—"} />
         <Stat label="Esta semana" value={semActual ? mxn(semActual.abono) : "—"} sub={semActual ? `Vence ${mxn(semActual.vence)}` : undefined} />

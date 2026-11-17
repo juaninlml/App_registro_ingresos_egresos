@@ -216,17 +216,22 @@ export function useTxRange(months: string[]) {
 
   const map = state?.key === key ? state.map : null;
 
-  /** Guarda la lista de un mes junto con otras secciones (todo o nada). */
-  const put = useCallback(async (month: string, next: Transaction[], extra: Write[]) => {
-    const prev = cache.current[month] ?? [];
-    const apply = (list: Transaction[]) => {
-      cache.current = { ...cache.current, [month]: list };
-      setState((s) => (s && month in s.map ? { ...s, map: { ...s.map, [month]: list } } : s));
+  /** Guarda las listas de uno o varios meses junto con otras secciones (todo o nada). */
+  const put = useCallback(async (cambios: Record<string, Transaction[]>, extra: Write[]) => {
+    const meses = Object.keys(cambios);
+    const prev = Object.fromEntries(meses.map((m) => [m, cache.current[m] ?? []]));
+    const apply = (listas: Record<string, Transaction[]>) => {
+      cache.current = { ...cache.current, ...listas };
+      setState((s) => {
+        if (!s) return s;
+        const visibles = Object.fromEntries(Object.entries(listas).filter(([m]) => m in s.map));
+        return Object.keys(visibles).length ? { ...s, map: { ...s.map, ...visibles } } : s;
+      });
     };
-    apply(next);
-    const ok = await commit([{ key: `tx:${month}`, value: next }, ...extra]);
+    apply(cambios);
+    const ok = await commit([...meses.map((m) => ({ key: `tx:${m}` as const, value: cambios[m] })), ...extra]);
     if (ok) setErr(null);
-    else if (cache.current[month] === next) apply(prev);
+    else apply(Object.fromEntries(meses.filter((m) => cache.current[m] === cambios[m]).map((m) => [m, prev[m]])));
     return ok;
   }, [commit]);
 
@@ -238,7 +243,7 @@ export function useTxRange(months: string[]) {
   const add = useCallback(async (t: Transaction, extra: Write[] = []) => {
     const m = t.fecha.slice(0, 7);
     try {
-      return await put(m, [...(await lista(m)), t], extra);
+      return await put({ [m]: [...(await lista(m)), t] }, extra);
     } catch (e) {
       setErr((e as Error).message);
       return false;
@@ -248,12 +253,26 @@ export function useTxRange(months: string[]) {
   const remove = useCallback(async (t: Transaction, extra: Write[] = []) => {
     const m = t.fecha.slice(0, 7);
     try {
-      return await put(m, (await lista(m)).filter((x) => x.id !== t.id), extra);
+      return await put({ [m]: (await lista(m)).filter((x) => x.id !== t.id) }, extra);
     } catch (e) {
       setErr((e as Error).message);
       return false;
     }
   }, [put, lista]);
 
-  return { map, err, add, remove };
+  /** Reemplaza un movimiento; si cambió de mes, lo saca de uno y lo pone en el otro en la misma escritura. */
+  const update = useCallback(async (antes: Transaction, despues: Transaction, extra: Write[] = []) => {
+    const m1 = antes.fecha.slice(0, 7);
+    const m2 = despues.fecha.slice(0, 7);
+    try {
+      if (m1 === m2) return await put({ [m1]: (await lista(m1)).map((x) => (x.id === antes.id ? despues : x)) }, extra);
+      const [l1, l2] = await Promise.all([lista(m1), lista(m2)]);
+      return await put({ [m1]: l1.filter((x) => x.id !== antes.id), [m2]: [...l2, despues] }, extra);
+    } catch (e) {
+      setErr((e as Error).message);
+      return false;
+    }
+  }, [put, lista]);
+
+  return { map, err, add, remove, update };
 }

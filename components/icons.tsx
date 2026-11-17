@@ -59,6 +59,10 @@ export const IconGasto = (p: P) => (
 export const IconPagoTarjeta = (p: P) => (
   <Svg {...p}><path d="M21.5 11V7.5A2.5 2.5 0 0 0 19 5H5a2.5 2.5 0 0 0-2.5 2.5v9A2.5 2.5 0 0 0 5 19h7.5M2.5 9.5h19" /><path d="m15.5 17.5 2 2 4-4" /></Svg>
 );
+/** Dinero que pasa entre tus cuentas. */
+export const IconTransferencia = (p: P) => (
+  <Svg {...p}><path d="M4.5 8.5h14M15 5l3.5 3.5L15 12M19.5 15.5h-14M9 12l-3.5 3.5L9 19" /></Svg>
+);
 export const IconCheck = (p: P) => (
   <Svg {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></Svg>
 );

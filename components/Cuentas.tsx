@@ -7,10 +7,11 @@ import { IconMas } from "@/components/icons";
 import { AnimatedNumber, useToast } from "@/components/motion";
 import { Btn, Card, Field, Modal, NumInput, Select, Skeleton, cx } from "@/components/ui";
 import { creditos, debitos, disponibleCuenta, mesesDesde } from "@/lib/cuentas";
-import { ahoraHM, fdate, fshort, monthKey } from "@/lib/dates";
+import { addMonthKey, ahoraHM, fdate, fshort, monthKey } from "@/lib/dates";
+import { comprasDesdeCorte, latestStatement, totalCompras } from "@/lib/finance";
 import { fijosDelMes, porPagar } from "@/lib/fijos";
 import { mxn, round2 } from "@/lib/money";
-import type { Card as CardT } from "@/lib/types";
+import type { Card as CardT, Transaction } from "@/lib/types";
 
 /** Selector de cuenta: efectivo, tarjetas de débito y de crédito, agrupadas. */
 export function CuentaSelect({ value, onChange, solo, efectivo = true, required }: {
@@ -52,6 +53,30 @@ export function useCuentas() {
     total: round2(cuentas.reduce((s, c) => s + (c.disponible ?? 0), 0)),
     pendientes: porPagar(fijosDelMes(db.fijos, txs[mes] ?? [], mes, today, db.cards), true),
   };
+}
+
+/**
+ * Compras con cada tarjeta de crédito registradas después de su último corte (ya son deuda aunque
+ * aún no aparezcan en el estado de cuenta). `undefined` mientras carga.
+ */
+export function useComprasCredito(): Record<string, { lista: Transaction[]; total: number }> | undefined {
+  const { db, today } = useData();
+  const hoy = monthKey(today);
+  const cortes = creditos(db.cards).map((c) => latestStatement(c)?.fechaCorte).filter((f): f is string => !!f).sort();
+  const meses: string[] = [];
+  // desde el mes del corte más antiguo hasta hoy (máximo un año atrás)
+  for (let m = cortes.length ? monthKey(cortes[0]) : hoy; m <= hoy && meses.length < 12; m = addMonthKey(m, 1)) meses.push(m);
+  if (meses.length === 12 && meses[11] !== hoy) meses.splice(0, meses.length, ...Array.from({ length: 12 }, (_, i) => addMonthKey(hoy, i - 11)));
+  const txs = useTxMonths(cortes.length ? meses : []);
+  if (!txs) return undefined;
+  const todos = meses.flatMap((m) => txs[m] ?? []);
+  const out: Record<string, { lista: Transaction[]; total: number }> = {};
+  for (const card of creditos(db.cards)) {
+    const st = latestStatement(card);
+    const lista = st ? comprasDesdeCorte(card, todos, st, today) : [];
+    out[card.id] = { lista, total: totalCompras(lista) };
+  }
+  return out;
 }
 
 /**

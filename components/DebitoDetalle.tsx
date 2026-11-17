@@ -4,10 +4,10 @@ import { useState } from "react";
 import { BancoColorFields, CardVisual, isColorId, type BancoColor } from "@/components/CardVisual";
 import { SaldoModal, useCuentas } from "@/components/Cuentas";
 import { useData, useTxMonths } from "@/components/DataProvider";
-import { IconGasto, IconIngreso, IconPagoTarjeta } from "@/components/icons";
+import { IconGasto, IconIngreso, IconPagoTarjeta, IconTransferencia } from "@/components/icons";
 import { AnimatedNumber, useToast } from "@/components/motion";
 import { Btn, Card, Empty, Field, Input, Modal, PageHeader, Section, Skeleton, Stat } from "@/components/ui";
-import { mesesDesde, movimientosCuenta } from "@/lib/cuentas";
+import { efectoEnCuenta, mesesDesde, movimientosCuenta } from "@/lib/cuentas";
 import { fdate, fhora, fshort, monthKey } from "@/lib/dates";
 import { fijosDelMes } from "@/lib/fijos";
 import { mxn, round2 } from "@/lib/money";
@@ -26,8 +26,10 @@ export function DebitoDetalle({ card }: { card: CardT }) {
   const meses = mesesDesde([card], today);
   const txs = useTxMonths(meses);
   const movs = txs ? movimientosCuenta(card, meses.flatMap((m) => txs[m] ?? []), today).sort((a, b) => `${b.fecha}${b.hora}`.localeCompare(`${a.fecha}${a.hora}`)) : null;
-  const entradas = movs ? round2(movs.filter((t) => t.tipo === "ingreso").reduce((s, t) => s + t.monto, 0)) : 0;
-  const salidas = movs ? round2(movs.filter((t) => t.tipo === "gasto").reduce((s, t) => s + t.monto, 0)) : 0;
+  // entradas y salidas de ESTA tarjeta (las transferencias cuentan según su dirección)
+  const efectos = movs ? movs.map((t) => efectoEnCuenta(t, card.id)) : [];
+  const entradas = round2(efectos.filter((x) => x > 0).reduce((s, x) => s + x, 0));
+  const salidas = round2(-efectos.filter((x) => x < 0).reduce((s, x) => s + x, 0));
   const mes = monthKey(today);
   const fijos = txs ? fijosDelMes(db.fijos.filter((f) => f.metodo === card.id), txs[mes] ?? [], mes, today, db.cards) : [];
   const nombre = (id?: string) => {
@@ -82,16 +84,23 @@ export function DebitoDetalle({ card }: { card: CardT }) {
           <Card className="divide-y divide-border/60 p-0 sm:p-0">
             {movs.slice(0, 50).map((t) => {
               const pago = t.categoria === PAGO_TARJETA && !!t.tarjetaId;
-              const Icono = t.tipo === "ingreso" ? IconIngreso : pago ? IconPagoTarjeta : IconGasto;
-              const tono = t.tipo === "ingreso" ? "ok" : pago ? "accent" : "danger";
+              const transf = t.tipo === "transferencia";
+              const efecto = efectoEnCuenta(t, card.id); // + entra a esta tarjeta, − sale de ella
+              const Icono = transf ? IconTransferencia : t.tipo === "ingreso" ? IconIngreso : pago ? IconPagoTarjeta : IconGasto;
+              const tono = transf ? "muted" : t.tipo === "ingreso" ? "ok" : pago ? "accent" : "danger";
+              const titulo = transf
+                ? efecto > 0
+                  ? `Transferencia desde ${t.metodo ? nombre(t.metodo) : "efectivo"}`
+                  : t.destinoId ? `Transferencia a ${nombre(t.destinoId)}` : "Retiro de efectivo"
+                : pago ? `Pago a ${nombre(t.tarjetaId)}` : t.categoria;
               return (
                 <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
                   <span className="grid size-9 shrink-0 place-items-center rounded-full" style={{ color: `var(--${tono})`, background: `color-mix(in oklab, var(--${tono}) 15%, transparent)` }}><Icono size={18} /></span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{pago ? `Pago a ${nombre(t.tarjetaId)}` : t.categoria}</div>
+                    <div className="truncate text-sm font-semibold">{titulo}</div>
                     <div className="truncate text-xs text-muted">{[fshort(t.fecha), fhora(t.hora), t.nota].filter(Boolean).join(" · ")}</div>
                   </div>
-                  <div className={`num shrink-0 text-sm font-semibold ${t.tipo === "ingreso" ? "text-ok" : ""}`}>{t.tipo === "ingreso" ? "+" : "−"}{mxn(t.monto)}</div>
+                  <div className={`num shrink-0 text-sm font-semibold ${efecto > 0 ? "text-ok" : ""}`}>{efecto > 0 ? "+" : "−"}{mxn(Math.abs(efecto))}</div>
                 </div>
               );
             })}

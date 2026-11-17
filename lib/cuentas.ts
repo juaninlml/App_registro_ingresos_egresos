@@ -28,7 +28,17 @@ function despuesDe(t: Transaction, s: NonNullable<Card["saldo"]>): boolean {
 export function movimientosCuenta(card: Card, txs: Transaction[], today: ISODate): Transaction[] {
   const s = card.saldo;
   if (!s) return [];
-  return txs.filter((t) => t.metodo === card.id && t.fecha <= today && despuesDe(t, s));
+  return txs.filter((t) => (t.metodo === card.id || t.destinoId === card.id) && t.fecha <= today && despuesDe(t, s));
+}
+
+/**
+ * Cuánto cambia el saldo de una cuenta por un movimiento: los ingresos suman, los gastos restan y en
+ * las transferencias resta a la cuenta de origen y suma a la de destino.
+ */
+export function efectoEnCuenta(t: Transaction, cuentaId: string): number {
+  if (t.tipo === "transferencia") return (t.destinoId === cuentaId ? t.monto : 0) - (t.metodo === cuentaId ? t.monto : 0);
+  if (t.metodo !== cuentaId) return 0;
+  return t.tipo === "ingreso" ? t.monto : -t.monto;
 }
 
 /**
@@ -38,6 +48,6 @@ export function movimientosCuenta(card: Card, txs: Transaction[], today: ISODate
 export function disponibleCuenta(card: Card, txs: Transaction[], today: ISODate): number {
   if (!card.saldo) return 0;
   let total = card.saldo.monto;
-  for (const t of movimientosCuenta(card, txs, today)) total += t.tipo === "ingreso" ? t.monto : -t.monto;
+  for (const t of movimientosCuenta(card, txs, today)) total += efectoEnCuenta(t, card.id);
   return round2(total);
 }

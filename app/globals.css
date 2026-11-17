@@ -159,6 +159,10 @@ dialog[open]::backdrop {
     row-in var(--dur-slow) var(--ease-out) 120ms both,
     row-glow 1400ms var(--ease-out) 240ms both;
 }
+/* Fila editada: solo se ilumina en su lugar (ya estaba ahí, no vuelve a entrar) */
+.row-edited {
+  animation: row-glow 1400ms var(--ease-out) 140ms both;
+}
 /* Fila que se borra: se desvanece y se recorta antes de salir */
 .row-out {
   pointer-events: none;

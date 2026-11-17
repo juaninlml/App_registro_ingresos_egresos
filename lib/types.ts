@@ -64,13 +64,17 @@ export interface Payment {
   loanPago?: number; // número de pago del préstamo que registró este abono
 }
 
+/** Categoría de los movimientos entre tus cuentas (no cuentan como ingreso ni gasto). */
+export const TRANSFERENCIA = "Transferencia";
+
 /** Categoría especial: crea también el abono a la tarjeta elegida. */
 export const PAGO_TARJETA = "Pago de tarjeta";
 
 export interface Transaction {
   id: string;
   fecha: ISODate;
-  tipo: "ingreso" | "gasto";
+  /** «transferencia»: dinero que pasa de una cuenta tuya a otra (o retiro/depósito de efectivo). */
+  tipo: "ingreso" | "gasto" | "transferencia";
   monto: number;
   categoria: string;
   nota?: string;
@@ -80,6 +84,8 @@ export interface Transaction {
   hora?: string; // hora de registro local "HH:MM"
   tarjetaId?: string; // en la categoría "Pago de tarjeta": la tarjeta que se paga
   fijoId?: string; // si es el pago de un gasto fijo de ese mes
+  /** En transferencias: la cuenta de débito que recibe el dinero (vacío = efectivo). El origen va en `metodo`. */
+  destinoId?: string;
 }
 
 /** Gasto que se repite cada mes (renta, suscripciones…). Queda «por pagar» hasta que se registra. */

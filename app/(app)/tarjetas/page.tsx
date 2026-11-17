@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { BancoColorFields, CardVisual, type BancoColor } from "@/components/CardVisual";
-import { useCuentas } from "@/components/Cuentas";
+import { useComprasCredito, useCuentas } from "@/components/Cuentas";
 import { useData } from "@/components/DataProvider";
 import { IconMas } from "@/components/icons";
 import { ImportStatement } from "@/components/ImportStatement";
@@ -28,6 +28,7 @@ export default function Tarjetas() {
   const vacio = { tipo: (params.get("nueva") === "debito" ? "debito" : "credito") as Tipo, banco: "", color: "" as BancoColor["color"], nombre: "", terminacion: "", limite: "" as number | "", diaCorte: "" as number | "", saldo: "" as number | "" };
   const [f, setF] = useState(vacio);
   const { cuentas } = useCuentas();
+  const compras = useComprasCredito();
   const credito = creditos(db.cards);
 
   async function crear(e: React.FormEvent) {
@@ -102,6 +103,7 @@ export default function Tarjetas() {
               const abonado = st ? abonadoDesdeCorte(c, db.payments, st) : 0;
               const falta = st ? Math.max(0, st.pagoNoIntereses - abonado) : 0;
               const d = st ? daysBetween(today, st.fechaLimite) : null;
+              const comprado = compras?.[c.id]?.total ?? 0;
               return (
                 <Link key={c.id} href={`/tarjetas/${c.id}`}>
                   <Card className="press h-full transition-colors duration-[var(--dur-fast)] hover:border-accent">
@@ -116,8 +118,8 @@ export default function Tarjetas() {
                     {st ? (
                       <div className="mt-3 text-sm">
                         <div className="text-muted">Deuda actual</div>
-                        <div className="num text-lg font-semibold">{mxn(deudaActual(c, db.payments, st))}</div>
-                        <div className="mt-1 text-xs text-muted">Falta {mxn(falta)} · límite {fdate(st.fechaLimite)}</div>
+                        <div className="text-lg font-semibold"><AnimatedNumber value={deudaActual(c, db.payments, st, comprado)} tone={{ up: "danger", down: "ok" }} /></div>
+                        <div className="mt-1 text-xs text-muted">Falta {mxn(falta)} · límite {fdate(st.fechaLimite)}{comprado > 0 ? ` · ${mxn(comprado)} en compras nuevas` : ""}</div>
                       </div>
                     ) : (
                       <div className="mt-3 text-sm text-muted">Sin estados de cuenta</div>

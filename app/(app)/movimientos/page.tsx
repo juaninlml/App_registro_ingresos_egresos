@@ -3,14 +3,14 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useData, useTxRange } from "@/components/DataProvider";
 import { CuentaSelect, DisponibleCard } from "@/components/Cuentas";
 import { FijosLista, movimientoDeFijo } from "@/components/Fijos";
-import { IconAdelante, IconAtras, IconBorrar, IconGasto, IconIngreso, IconMas, IconPagoTarjeta } from "@/components/icons";
+import { IconAdelante, IconAtras, IconBorrar, IconGasto, IconIngreso, IconMas, IconPagoTarjeta, IconTransferencia } from "@/components/icons";
 import { AnimatedNumber, Segmented, useToast } from "@/components/motion";
 import { Badge, Btn, Card, Field, IconBtn, Input, Modal, NumInput, PageHeader, Select, Skeleton, Stat, cx } from "@/components/ui";
 import { addDays, addMonths, ahoraHM, fhora, fmonth, fshort, lunesDe, monthKey, weekday, ymd } from "@/lib/dates";
 import { mxn, uid } from "@/lib/money";
 import { creditos, debitos, esDebito } from "@/lib/cuentas";
 import { fijosDelMes, porPagar, type FijoDelMes } from "@/lib/fijos";
-import { PAGO_TARJETA, type Transaction } from "@/lib/types";
+import { PAGO_TARJETA, TRANSFERENCIA, type Payment, type Transaction } from "@/lib/types";
 
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const corto = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
@@ -18,10 +18,14 @@ const suma = (ts: Transaction[], tipo: Transaction["tipo"]) => ts.filter((t) => 
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type Clase = "ingreso" | "gasto" | "pago";
-const clase = (t: Transaction): Clase => (t.tipo === "ingreso" ? "ingreso" : t.categoria === PAGO_TARJETA && t.tarjetaId ? "pago" : "gasto");
-const TONO = { ingreso: "ok", gasto: "danger", pago: "accent" } as const;
-const ICONO = { ingreso: IconIngreso, gasto: IconGasto, pago: IconPagoTarjeta } as const;
+type Clase = "ingreso" | "gasto" | "pago" | "transferencia";
+const clase = (t: Transaction): Clase =>
+  t.tipo === "ingreso" ? "ingreso" : t.tipo === "transferencia" ? "transferencia" : t.categoria === PAGO_TARJETA && t.tarjetaId ? "pago" : "gasto";
+const TONO = { ingreso: "ok", gasto: "danger", pago: "accent", transferencia: "muted" } as const;
+const ICONO = { ingreso: IconIngreso, gasto: IconGasto, pago: IconPagoTarjeta, transferencia: IconTransferencia } as const;
+const SIGNO = { ingreso: "+", gasto: "−", pago: "−", transferencia: "" } as const;
+const NOMBRE = { ingreso: "Ingreso", gasto: "Gasto", pago: "Pago", transferencia: "Transferencia" } as const;
+type Tipo = Transaction["tipo"];
 
 /** Agrega un id a un conjunto por un rato (para animaciones que se apagan solas). */
 function marcar(set: (fn: (s: Set<string>) => Set<string>) => void, id: string, ms: number) {
@@ -43,6 +47,9 @@ export default function Movimientos() {
   // filas recién agregadas (se iluminan) y filas que se están borrando (salen animadas)
   const [recientes, setRecientes] = useState<Set<string>>(new Set());
   const [saliendo, setSaliendo] = useState<Set<string>>(new Set());
+  const [editados, setEditados] = useState<Set<string>>(new Set());
+  // movimiento que se está editando (null = alta nueva)
+  const [editando, setEditando] = useState<Transaction | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [vista, setVista] = useState<"semana" | "mes">("semana");
   const [ancla, setAncla] = useState(today);
@@ -54,30 +61,41 @@ export default function Movimientos() {
   const desde = vista === "semana" ? lunes : `${mes}-01`;
   const hasta = vista === "semana" ? addDays(lunes, 6) : addDays(addMonths(`${mes}-01`, 1), -1);
   const meses = [...new Set([monthKey(desde), monthKey(hasta)])];
-  const { map, err, add, remove } = useTxRange(meses);
+  const { map, err, add, remove, update } = useTxRange(meses);
 
-  const [tipo, setTipo] = useState<"gasto" | "ingreso">("gasto");
-  // metodo null = usar la tarjeta de débito principal
-  const [f, setF] = useState({ monto: "" as number | "", cat: "", nota: "", fecha: "", metodo: null as string | null, tarjeta: "" });
+  const [tipo, setTipo] = useState<Tipo>("gasto");
+  // metodo/destino null = usar la sugerencia (tarjeta de débito principal / otra cuenta)
+  const vacio = { monto: "" as number | "", cat: "", nota: "", fecha: "", metodo: null as string | null, tarjeta: "", destino: null as string | null };
+  const [f, setF] = useState(vacio);
   const [msg, setMsg] = useState<string | null>(null);
 
   const catsBase = tipo === "gasto" ? db.settings.categoriasGasto : db.settings.categoriasIngreso;
   const cats = tipo === "gasto" && !catsBase.includes(PAGO_TARJETA) ? [...catsBase, PAGO_TARJETA] : catsBase;
   const cat = f.cat && cats.includes(f.cat) ? f.cat : cats[0] ?? "Otros";
   const esPago = tipo === "gasto" && cat === PAGO_TARJETA;
+  const esTransf = tipo === "transferencia";
   const credito = creditos(db.cards);
   const tarjeta = f.tarjeta && credito.some((c) => c.id === f.tarjeta) ? f.tarjeta : credito[0]?.id ?? "";
   // cuenta del movimiento: ingresos y pagos de tarjeta solo pueden ser débito o efectivo
   const cuentaPrincipal = debitos(db.cards)[0]?.id ?? "";
   const elegida = f.metodo ?? cuentaPrincipal;
-  const soloDebito = tipo === "ingreso" || esPago;
+  const soloDebito = tipo !== "gasto" || esPago;
   const cuenta = soloDebito && elegida && !esDebito(db.cards.find((c) => c.id === elegida)) ? cuentaPrincipal : elegida;
+  // en transferencias: hacia dónde va el dinero (otra cuenta de débito, o efectivo si es un retiro)
+  const sugerido = debitos(db.cards).find((c) => c.id !== cuenta)?.id ?? (cuenta ? "" : cuentaPrincipal);
+  const destinoElegido = f.destino ?? sugerido;
+  const destino = destinoElegido && !esDebito(db.cards.find((c) => c.id === destinoElegido)) ? sugerido : destinoElegido;
   const fecha = f.fecha || today;
   const nombreTarjeta = (id?: string) => {
     const c = db.cards.find((x) => x.id === id);
     return c ? `${c.banco} ${c.nombre}` : "tarjeta";
   };
   const esPagoTx = (t: Transaction) => t.tipo === "gasto" && t.categoria === PAGO_TARJETA && !!t.tarjetaId;
+  const nombreCuenta = (id?: string) => (id ? nombreTarjeta(id) : "Efectivo");
+  /** «Transferencia», «Retiro de efectivo» o «Depósito de efectivo», según las cuentas. */
+  const tituloTransf = (t: Pick<Transaction, "metodo" | "destinoId">) => (!t.metodo ? "Depósito de efectivo" : !t.destinoId ? "Retiro de efectivo" : "Transferencia");
+  /** «registrada» para una transferencia, «registrado» para un retiro o depósito. */
+  const conGenero = (t: Pick<Transaction, "metodo" | "destinoId">, raiz: string) => raiz + (t.metodo && t.destinoId ? "a" : "o");
 
   const items = map ? meses.flatMap((m) => map[m] ?? []).filter((t) => t.fecha >= desde && t.fecha <= hasta) : null;
   const porDia = new Map<string, Transaction[]>();
@@ -109,7 +127,22 @@ export default function Movimientos() {
   }
 
   function irAForm(d: string) {
-    setF((x) => ({ ...x, fecha: d }));
+    if (editando) {
+      // venía de editar: empezar en limpio (conservando la última categoría)
+      setEditando(null);
+      setF({ ...vacio, cat: f.cat, fecha: d });
+    } else {
+      setF((x) => ({ ...x, fecha: d }));
+    }
+    setMsg(null);
+    setAbierto(true);
+  }
+
+  /** Abre el formulario con los datos del movimiento para corregirlo. */
+  function editar(t: Transaction) {
+    setEditando(t);
+    setTipo(t.tipo);
+    setF({ monto: t.monto, cat: t.tipo === "transferencia" ? f.cat : t.categoria, nota: t.nota ?? "", fecha: t.fecha, metodo: t.metodo ?? "", tarjeta: t.tarjetaId ?? "", destino: t.destinoId ?? "" });
     setMsg(null);
     setAbierto(true);
   }
@@ -120,27 +153,45 @@ export default function Movimientos() {
       setMsg("Primero agrega una tarjeta de crédito para registrar pagos.");
       return;
     }
+    if (esTransf && cuenta === destino) {
+      setMsg("Elige cuentas distintas: el dinero tiene que salir de una y llegar a otra.");
+      return;
+    }
     setMsg(null);
+    const previo = editando;
     const t: Transaction = {
-      id: uid(), fecha, hora: ahoraHM(), tipo, monto: Number(f.monto), categoria: cat, nota: f.nota.trim() || undefined,
+      id: previo?.id ?? uid(),
+      hora: previo?.hora ?? ahoraHM(), // se conserva la hora original: ordena el movimiento frente al ajuste de saldo
+      fecha,
+      tipo,
+      monto: Number(f.monto),
+      categoria: esTransf ? TRANSFERENCIA : cat,
+      nota: f.nota.trim() || undefined,
       metodo: cuenta || undefined,
       tarjetaId: esPago ? tarjeta : undefined,
+      destinoId: esTransf ? destino || undefined : undefined,
+      fijoId: tipo === "gasto" ? previo?.fijoId : undefined,
     };
-    // el movimiento y el abono a la tarjeta se guardan juntos: o ambos o ninguno
-    const abono = esPago
-      ? [{ key: "payments" as const, value: [...db.payments, { id: uid(), fecha, monto: t.monto, destino: "card" as const, targetId: tarjeta, nota: t.nota ?? "Pago desde movimientos", txId: t.id }] }]
-      : [];
-    // el formulario se cierra al instante para que se vea llegar el movimiento; si no se guarda, se reabre con los datos
+    // el abono ligado a un pago de tarjeta se crea, actualiza o quita junto con el movimiento (todo o nada)
+    const ligado = db.payments.find((p) => p.txId === t.id);
+    const abono: Payment | null = esPago
+      ? { id: ligado?.id ?? uid(), fecha, monto: t.monto, destino: "card", targetId: tarjeta, nota: t.nota ?? "Pago desde movimientos", txId: t.id }
+      : null;
+    const extra = ligado || abono ? [{ key: "payments" as const, value: [...db.payments.filter((p) => p.txId !== t.id), ...(abono ? [abono] : [])] }] : [];
+
+    // el formulario se cierra al instante para que se vea el cambio; si no se guarda, se reabre con los datos
     const antes = f;
     setAbierto(false);
-    setF({ ...f, monto: "", nota: "" });
+    setEditando(null);
+    setF(previo ? { ...vacio, cat: f.cat } : { ...f, monto: "", nota: "" });
     setGuardando(true);
-    marcar(setRecientes, t.id, 2200);
-    if (fecha >= lunes && fecha <= addDays(lunes, 6)) setSelDia(fecha); // muestra el día donde aterrizó
-    const ok = await add(t, abono);
+    marcar(previo ? setEditados : setRecientes, t.id, 2200);
+    if (fecha >= lunes && fecha <= addDays(lunes, 6)) setSelDia(fecha); // muestra el día donde quedó
+    const ok = previo ? await update(previo, t, extra) : await add(t, extra);
     setGuardando(false);
     if (!ok) {
       setF(antes);
+      setEditando(previo);
       setMsg("No se pudo guardar. Revisa tu conexión e intenta de nuevo.");
       setAbierto(true);
       return;
@@ -150,8 +201,16 @@ export default function Movimientos() {
     toast({
       tone: TONO[k],
       icon: <Icono size={18} />,
-      title: esPago ? `Pago a ${nombreTarjeta(tarjeta)} registrado` : `${t.tipo === "ingreso" ? "Ingreso" : "Gasto"} registrado`,
-      detail: `${t.tipo === "ingreso" ? "+" : "−"}${mxn(t.monto)} · ${esPago ? "también se abonó a la tarjeta" : t.categoria}`,
+      title: previo
+        ? k === "transferencia" ? `${tituloTransf(t)} ${conGenero(t, "actualizad")}` : `${NOMBRE[k]} actualizado`
+        : esPago
+          ? `Pago a ${nombreTarjeta(tarjeta)} registrado`
+          : esTransf
+            ? `${tituloTransf(t)} ${conGenero(t, "registrad")}`
+            : `${NOMBRE[k]} registrado`,
+      detail: esTransf
+        ? `${mxn(t.monto)} · ${nombreCuenta(t.metodo)} → ${nombreCuenta(t.destinoId)}`
+        : `${SIGNO[k]}${mxn(t.monto)} · ${esPago ? (previo ? "también se actualizó el abono" : "también se abonó a la tarjeta") : t.categoria}`,
     });
   }
 
@@ -170,8 +229,8 @@ export default function Movimientos() {
     toast({
       tone: "muted",
       icon: <IconBorrar size={18} />,
-      title: esPagoTx(t) ? "Pago borrado" : `${t.tipo === "ingreso" ? "Ingreso" : "Gasto"} borrado`,
-      detail: `${t.categoria} · ${mxn(t.monto)}${ligados.length ? " · y su abono" : ""}`,
+      title: clase(t) === "transferencia" ? `${tituloTransf(t)} ${conGenero(t, "borrad")}` : `${NOMBRE[clase(t)]} borrado`,
+      detail: `${clase(t) === "transferencia" ? `${nombreCuenta(t.metodo)} → ${nombreCuenta(t.destinoId)}` : t.categoria} · ${mxn(t.monto)}${ligados.length ? " · y su abono" : ""}`,
       action: {
         label: "Deshacer",
         onClick: () => {
@@ -190,19 +249,32 @@ export default function Movimientos() {
       <div
         key={t.id}
         style={{ "--tone": `var(--${TONO[k]})` } as CSSProperties}
-        className={cx("flex items-center gap-3 rounded-xl border border-border bg-surface py-2.5 pl-2.5 pr-1", recientes.has(t.id) && "row-new", saliendo.has(t.id) && "row-out")}
+        className={cx("flex items-center gap-1 rounded-xl border border-border bg-surface p-1", recientes.has(t.id) && "row-new", editados.has(t.id) && "row-edited", saliendo.has(t.id) && "row-out")}
       >
-        <span className="grid size-9 shrink-0 place-items-center rounded-full" style={{ color: `var(--${TONO[k]})`, background: `color-mix(in oklab, var(--${TONO[k]}) 15%, transparent)` }}>
-          <Icono size={18} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{k === "pago" ? `Pago a ${nombreTarjeta(t.tarjetaId)}` : t.categoria}</div>
-          <div className="truncate text-xs text-muted">
-            {[fhora(t.hora), t.nota, t.metodo ? `${k === "ingreso" ? "En" : k === "pago" ? "Desde" : "Con"} ${nombreTarjeta(t.metodo)}` : null].filter(Boolean).join(" · ") || "Sin hora"}
-          </div>
-        </div>
-        <div className={cx("num shrink-0 text-sm font-semibold", k === "ingreso" ? "text-ok" : k === "pago" ? "text-accent-text" : "")}>{t.tipo === "ingreso" ? "+" : "−"}{mxn(t.monto)}</div>
-        <IconBtn label={`Borrar ${t.categoria} de ${mxn(t.monto)}`} small onClick={() => void borrar(t)} className="hover:!text-danger"><IconBorrar size={17} /></IconBtn>
+        {/* toda la fila abre la edición; el botón de basura queda aparte */}
+        <button
+          type="button"
+          onClick={() => editar(t)}
+          aria-label={`Editar ${k === "transferencia" ? tituloTransf(t) : t.categoria} de ${mxn(t.monto)}`}
+          className="press flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1.5 pl-1.5 pr-1 text-left hover:bg-surface-2/60"
+        >
+          <span className="grid size-9 shrink-0 place-items-center rounded-full" style={{ color: `var(--${TONO[k]})`, background: `color-mix(in oklab, var(--${TONO[k]}) 15%, transparent)` }}>
+            <Icono size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{k === "pago" ? `Pago a ${nombreTarjeta(t.tarjetaId)}` : k === "transferencia" ? tituloTransf(t) : t.categoria}</span>
+            <span className="block truncate text-xs text-muted">
+              {[
+                fhora(t.hora),
+                k === "transferencia" ? `${nombreCuenta(t.metodo)} → ${nombreCuenta(t.destinoId)}` : null,
+                t.nota,
+                k !== "transferencia" && t.metodo ? `${k === "ingreso" ? "En" : k === "pago" ? "Desde" : "Con"} ${nombreTarjeta(t.metodo)}` : null,
+              ].filter(Boolean).join(" · ") || "Sin hora"}
+            </span>
+          </span>
+          <span className={cx("num shrink-0 text-sm font-semibold", k === "ingreso" ? "text-ok" : k === "pago" ? "text-accent-text" : k === "transferencia" ? "text-muted" : "")}>{SIGNO[k]}{mxn(t.monto)}</span>
+        </button>
+        <IconBtn label={`Borrar ${k === "transferencia" ? tituloTransf(t) : t.categoria} de ${mxn(t.monto)}`} small onClick={() => void borrar(t)} className="hover:!text-danger"><IconBorrar size={17} /></IconBtn>
       </div>
     );
   };
@@ -357,23 +429,49 @@ export default function Movimientos() {
         <FijosLista month={mes} lista={fijosMes} onPagar={pagarFijo} />
       </section>
 
-      <Modal open={abierto} onClose={() => setAbierto(false)} title={esPago ? "Registrar pago de tarjeta" : tipo === "gasto" ? "Registrar gasto" : "Registrar ingreso"}>
+      <Modal
+        open={abierto}
+        onClose={() => setAbierto(false)}
+        title={editando ? `Editar ${esTransf ? "transferencia" : esPago ? "pago de tarjeta" : tipo}` : esTransf ? "Transferir entre cuentas" : esPago ? "Registrar pago de tarjeta" : tipo === "gasto" ? "Registrar gasto" : "Registrar ingreso"}
+      >
         <div>
           <div className="mb-4">
-            <Segmented label="Tipo de movimiento" value={tipo} onChange={setTipo} tones={{ gasto: "danger", ingreso: "ok" }} options={[{ value: "gasto", label: "Gasto" }, { value: "ingreso", label: "Ingreso" }]} />
+            <Segmented
+              label="Tipo de movimiento"
+              value={tipo}
+              onChange={setTipo}
+              tones={{ gasto: "danger", ingreso: "ok", transferencia: "muted" }}
+              options={[{ value: "gasto", label: "Gasto" }, { value: "ingreso", label: "Ingreso" }, { value: "transferencia", label: "Transferir" }]}
+            />
           </div>
           {msg && <p role="alert" className="mb-3 text-sm text-danger">{msg}</p>}
           <form onSubmit={agregar} className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <Field label="Monto">
                 <span className="relative block">
-                  <span aria-hidden className={cx("pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xl font-semibold", tipo === "ingreso" ? "text-ok" : esPago ? "text-accent-text" : "text-danger")}>{tipo === "ingreso" ? "+" : "−"}$</span>
-                  <NumInput value={f.monto} onChange={(n) => setF({ ...f, monto: n })} min={0.01} required autoFocus placeholder="0.00" className="num !py-3 pl-11 !text-2xl font-semibold" />
+                  <span aria-hidden className={cx("pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xl font-semibold", esTransf ? "text-muted" : tipo === "ingreso" ? "text-ok" : esPago ? "text-accent-text" : "text-danger")}>{esTransf ? "" : tipo === "ingreso" ? "+" : "−"}$</span>
+                  <NumInput value={f.monto} onChange={(n) => setF({ ...f, monto: n })} min={0.01} required autoFocus placeholder="0.00" className={cx("num !py-3 !text-2xl font-semibold", esTransf ? "pl-8" : "pl-11")} />
                 </span>
               </Field>
             </div>
-            <div className="col-span-2"><Field label="Categoría"><Select value={cat} onChange={(e) => setF({ ...f, cat: e.target.value })}>{cats.map((c) => <option key={c}>{c}</option>)}</Select></Field></div>
-            <div className="col-span-2"><Field label="Fecha" hint="La hora se guarda sola al registrar"><Input type="date" value={fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} required /></Field></div>
+            {esTransf ? (
+              <>
+                <div className="col-span-2">
+                  <Field label="Desde" hint={cuenta ? "Se resta del saldo de esta cuenta." : "Depósito de efectivo: el dinero sale de tu bolsillo."}>
+                    <CuentaSelect value={cuenta} onChange={(v) => setF({ ...f, metodo: v })} solo="debito" />
+                  </Field>
+                </div>
+                <div className="col-span-2">
+                  <Field label="Hacia" hint={destino ? "Se suma al saldo de esta cuenta." : "Retiro de efectivo: el dinero sale de la tarjeta a tu bolsillo."}>
+                    <CuentaSelect value={destino} onChange={(v) => setF({ ...f, destino: v })} solo="debito" />
+                  </Field>
+                </div>
+                <p className="col-span-2 -mt-1 text-xs text-muted">Una transferencia no cuenta como ingreso ni como gasto: solo mueve tu dinero de lugar.</p>
+              </>
+            ) : (
+              <div className="col-span-2"><Field label="Categoría"><Select value={cat} onChange={(e) => setF({ ...f, cat: e.target.value })}>{cats.map((c) => <option key={c}>{c}</option>)}</Select></Field></div>
+            )}
+            <div className="col-span-2"><Field label="Fecha" hint={editando ? undefined : "La hora se guarda sola al registrar"}><Input type="date" value={fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} required /></Field></div>
             <div className="col-span-2"><Field label="Nota"><Input value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} maxLength={120} placeholder="Opcional" /></Field></div>
             {esPago ? (
               <div className="col-span-2">
@@ -382,7 +480,7 @@ export default function Movimientos() {
                 </Field>
               </div>
             ) : null}
-            <div className="col-span-2">
+            <div className={cx("col-span-2", esTransf && "hidden")}>
               <Field
                 label={esPago ? "Pagado desde" : tipo === "ingreso" ? "Depositado en" : "Pagado con"}
                 hint={!cuenta ? "En efectivo: no cambia el saldo de ninguna tarjeta." : esDebito(db.cards.find((c) => c.id === cuenta)) ? (tipo === "ingreso" ? "Se suma al saldo de esa tarjeta de débito." : "Se resta del saldo de esa tarjeta de débito.") : "Con crédito no sale de tu dinero; se suma a la deuda de la tarjeta."}
@@ -392,7 +490,7 @@ export default function Movimientos() {
             </div>
             <div className="col-span-2 flex items-end">
               <Btn variant="primary" type="submit" disabled={!map || guardando} className="w-full">
-                {guardando ? "Guardando…" : esPago ? "Registrar pago" : tipo === "gasto" ? "Registrar gasto" : "Registrar ingreso"}
+                {guardando ? "Guardando…" : editando ? "Guardar cambios" : esTransf ? "Transferir" : esPago ? "Registrar pago" : tipo === "gasto" ? "Registrar gasto" : "Registrar ingreso"}
               </Btn>
             </div>
           </form>
