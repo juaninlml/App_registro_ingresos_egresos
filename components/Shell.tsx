@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useData } from "./DataProvider";
-import { IconAjustes, IconCredito, IconMovimientos, IconPlan, IconResumen, IconSalir, IconTarjeta } from "./icons";
+import { IconAjustes, IconCredito, IconLibreta, IconMovimientos, IconPlan, IconResumen, IconSalir, IconTarjeta } from "./icons";
 import { Logo } from "./Logo";
 import { ToastProvider } from "./motion";
 import { Skeleton, cx } from "./ui";
@@ -14,6 +14,7 @@ const NAV = [
   { href: "/plan", label: "Plan", Icon: IconPlan },
   { href: "/movimientos", label: "Movimientos", Icon: IconMovimientos },
   { href: "/prestamos", label: "Créditos", Icon: IconCredito },
+  { href: "/cierre", label: "Cierre de mes", Icon: IconLibreta, soloEscritorio: true },
   { href: "/ajustes", label: "Ajustes", Icon: IconAjustes },
 ];
 
@@ -76,7 +77,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
-        {NAV.map((n) => {
+        {NAV.filter((n) => !n.soloEscritorio).map((n) => {
           const on = active(n.href);
           return (
             <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined} className={cx("press flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium", on ? "text-accent-text" : "text-muted")}>

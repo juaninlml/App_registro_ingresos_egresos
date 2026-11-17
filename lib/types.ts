@@ -88,14 +88,18 @@ export interface Transaction {
   destinoId?: string;
 }
 
-/** Gasto que se repite cada mes (renta, suscripciones…). Queda «por pagar» hasta que se registra. */
+/**
+ * Gasto o ingreso que se repite cada mes (renta, suscripciones, sueldo…). Queda «por pagar» / «por cobrar»
+ * hasta que se registra el movimiento.
+ */
 export interface GastoFijo {
   id: string;
+  tipo?: "gasto" | "ingreso"; // sin valor = gasto
   nombre: string;
   monto: number;
   dia: number; // día del mes (si el mes es más corto, se usa el último día)
   categoria: string;
-  metodo?: string; // id de la tarjeta (crédito o débito) con que se paga; vacío = efectivo
+  metodo?: string; // gasto: tarjeta con que se paga; ingreso: tarjeta de débito donde entra. Vacío = efectivo
   desde?: string; // mes "YYYY-MM" desde el que aplica
 }
 
@@ -117,6 +121,12 @@ export interface PlanConfig {
 export interface Settings {
   categoriasGasto: string[];
   categoriasIngreso: string[];
+  /** Tope mensual por categoría de gasto (método kakeibo). */
+  presupuestos?: Record<string, number>;
+  /** Cuánto quieres ahorrar cada mes. */
+  metaAhorro?: number;
+  /** Reflexión del cierre de cada mes: { "2026-11": "…" }. */
+  notasMes?: Record<string, string>;
 }
 
 export interface DB {

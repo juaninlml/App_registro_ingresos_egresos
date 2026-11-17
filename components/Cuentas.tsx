@@ -9,7 +9,7 @@ import { Btn, Card, Field, Modal, NumInput, Select, Skeleton, cx } from "@/compo
 import { creditos, debitos, disponibleCuenta, mesesDesde } from "@/lib/cuentas";
 import { addMonthKey, ahoraHM, fdate, fshort, monthKey } from "@/lib/dates";
 import { comprasDesdeCorte, latestStatement, totalCompras } from "@/lib/finance";
-import { fijosDelMes, porPagar } from "@/lib/fijos";
+import { esIngresoFijo, fijosDelMes, porPagar } from "@/lib/fijos";
 import { mxn, round2 } from "@/lib/money";
 import type { Card as CardT, Transaction } from "@/lib/types";
 
@@ -45,13 +45,16 @@ export function useCuentas() {
   const txs = useTxMonths(meses);
   const mes = monthKey(today);
   const lista = debitos(db.cards);
-  if (!txs) return { cuentas: lista.map((card) => ({ card, disponible: undefined as number | undefined })), total: undefined, pendientes: undefined };
+  if (!txs) return { cuentas: lista.map((card) => ({ card, disponible: undefined as number | undefined })), total: undefined, pendientes: undefined, cobrar: undefined };
+  const delMes = fijosDelMes(db.fijos, txs[mes] ?? [], mes, today, db.cards);
   const todos = meses.flatMap((m) => txs[m] ?? []);
   const cuentas = lista.map((card) => ({ card, disponible: disponibleCuenta(card, todos, today) as number | undefined }));
   return {
     cuentas,
     total: round2(cuentas.reduce((s, c) => s + (c.disponible ?? 0), 0)),
-    pendientes: porPagar(fijosDelMes(db.fijos, txs[mes] ?? [], mes, today, db.cards), true),
+    pendientes: porPagar(delMes, true),
+    // ingresos fijos que aún no llegan y que caen en una tarjeta de débito
+    cobrar: round2(delMes.filter((x) => esIngresoFijo(x) && x.estado !== "pagado" && lista.some((c) => c.id === x.fijo.metodo)).reduce((s, x) => s + x.fijo.monto, 0)),
   };
 }
 
@@ -84,7 +87,7 @@ export function useComprasCredito(): Record<string, { lista: Transaction[]; tota
  * fijos que faltan por pagar este mes. Así sabes cuánto puedes gastar sin usar las de crédito.
  */
 export function DisponibleCard() {
-  const { cuentas, total, pendientes } = useCuentas();
+  const { cuentas, total, pendientes, cobrar } = useCuentas();
   const [ajustar, setAjustar] = useState<string | null>(null);
   const restante = total !== undefined && pendientes !== undefined ? round2(total - pendientes) : null;
 
@@ -121,6 +124,11 @@ export function DisponibleCard() {
             </div>
           </div>
         </div>
+        {restante !== null && !!cobrar && (
+          <p className="mt-3 rounded-xl bg-ok-soft px-3 py-2 text-sm text-ok">
+            Con <span className="num font-semibold">{mxn(cobrar)}</span> de ingresos fijos por cobrar, a fin de mes tendrías <span className="num font-semibold">{mxn(restante + cobrar)}</span>.
+          </p>
+        )}
 
         {/* cada tarjeta de débito con su saldo; tocarla permite ajustarlo */}
         <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">

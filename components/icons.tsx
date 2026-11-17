@@ -59,6 +59,14 @@ export const IconGasto = (p: P) => (
 export const IconPagoTarjeta = (p: P) => (
   <Svg {...p}><path d="M21.5 11V7.5A2.5 2.5 0 0 0 19 5H5a2.5 2.5 0 0 0-2.5 2.5v9A2.5 2.5 0 0 0 5 19h7.5M2.5 9.5h19" /><path d="m15.5 17.5 2 2 4-4" /></Svg>
 );
+/** Libreta del kakeibo (cierre de mes). */
+export const IconLibreta = (p: P) => (
+  <Svg {...p}><rect x="5" y="3.5" width="14.5" height="17" rx="2" /><path d="M8.5 3.5v17M3.5 7.5h3M3.5 12h3M3.5 16.5h3M11.5 8h5M11.5 11.5h3.5" /></Svg>
+);
+/** Lupa (buscar). */
+export const IconBuscar = (p: P) => (
+  <Svg {...p}><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></Svg>
+);
 /** Dinero que pasa entre tus cuentas. */
 export const IconTransferencia = (p: P) => (
   <Svg {...p}><path d="M4.5 8.5h14M15 5l3.5 3.5L15 12M19.5 15.5h-14M9 12l-3.5 3.5L9 19" /></Svg>

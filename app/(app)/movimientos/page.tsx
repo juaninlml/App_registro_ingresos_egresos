@@ -1,15 +1,17 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useData, useTxRange } from "@/components/DataProvider";
+import { BuscarModal } from "@/components/Buscar";
 import { CuentaSelect, DisponibleCard } from "@/components/Cuentas";
 import { FijosLista, movimientoDeFijo } from "@/components/Fijos";
-import { IconAdelante, IconAtras, IconBorrar, IconGasto, IconIngreso, IconMas, IconPagoTarjeta, IconTransferencia } from "@/components/icons";
+import { IconAdelante, IconAtras, IconBorrar, IconBuscar, IconGasto, IconIngreso, IconMas, IconPagoTarjeta, IconTransferencia } from "@/components/icons";
 import { AnimatedNumber, Segmented, useToast } from "@/components/motion";
 import { Badge, Btn, Card, Field, IconBtn, Input, Modal, NumInput, PageHeader, Select, Skeleton, Stat, cx } from "@/components/ui";
-import { addDays, addMonths, ahoraHM, fhora, fmonth, fshort, lunesDe, monthKey, weekday, ymd } from "@/lib/dates";
+import { addDays, addMonths, ahoraHM, fhora, fmesTitulo, fmonth, fshort, lunesDe, monthKey, weekday, ymd } from "@/lib/dates";
 import { mxn, uid } from "@/lib/money";
 import { creditos, debitos, esDebito } from "@/lib/cuentas";
-import { fijosDelMes, porPagar, type FijoDelMes } from "@/lib/fijos";
+import { esIngresoFijo, fijosDelMes, porCobrar, porPagar, type FijoDelMes } from "@/lib/fijos";
+import { gastadoPorCategoria, nivelPresupuesto } from "@/lib/presupuesto";
 import { PAGO_TARJETA, TRANSFERENCIA, type Payment, type Transaction } from "@/lib/types";
 
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -55,6 +57,7 @@ export default function Movimientos() {
   const [ancla, setAncla] = useState(today);
   const [selDia, setSelDia] = useState(today);
   const [abierto, setAbierto] = useState(false);
+  const [buscando, setBuscando] = useState(false);
 
   const lunes = lunesDe(ancla);
   const mes = monthKey(ancla);
@@ -107,6 +110,7 @@ export default function Movimientos() {
   // gastos fijos del periodo: los que faltan por pagar ya cuentan en los egresos
   const fijosRango = map ? meses.flatMap((m) => fijosDelMes(db.fijos, map[m] ?? [], m, today, db.cards)).filter((x) => x.fecha >= desde && x.fecha <= hasta) : [];
   const fijosPend = porPagar(fijosRango);
+  const fijosCobrar = porCobrar(fijosRango);
   const fijosMes = map ? fijosDelMes(db.fijos, map[mes] ?? [], mes, today, db.cards) : null;
 
   const mover = (dir: -1 | 1) => setAncla(vista === "semana" ? addDays(ancla, dir * 7) : addMonths(`${mes}-01`, dir));
@@ -114,7 +118,7 @@ export default function Movimientos() {
   const diaSel = selDia >= lunes && selDia <= domingo ? selDia : today >= lunes && today <= domingo ? today : lunes;
   const etiqueta = vista === "semana"
     ? `${fshort(lunes)} – ${fshort(addDays(lunes, 6))}`
-    : fmonth(mes);
+    : fmesTitulo(mes);
 
   /** Registra el pago de un gasto fijo como movimiento (queda ligado para no contarlo dos veces). */
   async function pagarFijo(x: FijoDelMes) {
@@ -122,7 +126,13 @@ export default function Movimientos() {
     marcar(setRecientes, t.id, 2200);
     if (t.fecha >= lunes && t.fecha <= addDays(lunes, 6)) setSelDia(t.fecha);
     if (await add(t)) {
-      toast({ tone: "danger", icon: <IconGasto size={18} />, title: `${x.fijo.nombre} pagado`, detail: `−${mxn(t.monto)} · ${x.fijo.metodo ? `con ${nombreTarjeta(x.fijo.metodo)}` : "en efectivo"}` });
+      const ingreso = esIngresoFijo(x);
+      toast({
+        tone: ingreso ? "ok" : "danger",
+        icon: ingreso ? <IconIngreso size={18} /> : <IconGasto size={18} />,
+        title: `${x.fijo.nombre} ${ingreso ? "cobrado" : "pagado"}`,
+        detail: `${ingreso ? "+" : "−"}${mxn(t.monto)} · ${x.fijo.metodo ? `${ingreso ? "en" : "con"} ${nombreTarjeta(x.fijo.metodo)}` : "en efectivo"}`,
+      });
     }
   }
 
@@ -212,6 +222,22 @@ export default function Movimientos() {
         ? `${mxn(t.monto)} · ${nombreCuenta(t.metodo)} → ${nombreCuenta(t.destinoId)}`
         : `${SIGNO[k]}${mxn(t.monto)} · ${esPago ? (previo ? "también se actualizó el abono" : "también se abonó a la tarjeta") : t.categoria}`,
     });
+
+    // aviso de presupuesto: si con este gasto la categoría llega al 80 % de su tope (o lo pasa)
+    const tope = db.settings.presupuestos?.[t.categoria];
+    const m = t.fecha.slice(0, 7);
+    if (tope && t.tipo === "gasto" && map?.[m]) {
+      const lista = [...map[m].filter((x) => x.id !== t.id), t];
+      const gastado = gastadoPorCategoria(lista, fijosDelMes(db.fijos, lista, m, today, db.cards))[t.categoria] ?? 0;
+      const { pct, nivel, restante } = nivelPresupuesto(gastado, tope);
+      if (nivel !== "ok") {
+        toast({
+          tone: nivel === "danger" ? "danger" : "warn",
+          title: nivel === "danger" ? `Te pasaste del presupuesto de ${t.categoria}` : `Llevas ${Math.round(pct * 100)}% de ${t.categoria}`,
+          detail: restante >= 0 ? `Te quedan ${mxn(restante)} de ${mxn(tope)} este mes` : `${mxn(-restante)} arriba del tope de ${mxn(tope)}`,
+        });
+      }
+    }
   }
 
   /** Borra sin preguntar: la fila sale animada y el aviso permite deshacer. */
@@ -297,11 +323,14 @@ export default function Movimientos() {
             {/* en celular la navegación ocupa su propia fila completa */}
             <div className="order-last flex w-full items-center justify-between gap-1 rounded-xl bg-surface-2/60 p-0.5 sm:order-none sm:w-auto sm:bg-transparent sm:p-0">
               <IconBtn label={vista === "semana" ? "Semana anterior" : "Mes anterior"} onClick={() => mover(-1)}><IconAtras size={18} /></IconBtn>
-              <span className="min-w-32 flex-1 text-center text-sm font-semibold capitalize sm:flex-none">{etiqueta}</span>
+              <span className="min-w-32 flex-1 text-center text-sm font-semibold sm:flex-none">{etiqueta}</span>
               <Btn small onClick={() => { setAncla(today); setSelDia(today); }}>Hoy</Btn>
               <IconBtn label={vista === "semana" ? "Semana siguiente" : "Mes siguiente"} onClick={() => mover(1)}><IconAdelante size={18} /></IconBtn>
             </div>
-            <Btn variant="primary" onClick={() => irAForm(vista === "semana" ? diaSel : today)}><IconMas size={18} />Agregar</Btn>
+            <span className="flex items-center gap-1">
+              <IconBtn label="Buscar movimientos" onClick={() => setBuscando(true)}><IconBuscar size={19} /></IconBtn>
+              <Btn variant="primary" onClick={() => irAForm(vista === "semana" ? diaSel : today)}><IconMas size={18} />Agregar</Btn>
+            </span>
           </div>
         </>
       } />
@@ -310,7 +339,7 @@ export default function Movimientos() {
       <DisponibleCard />
 
       <div className="mb-5 grid grid-cols-2 gap-3">
-        <Stat label={`Ingresos ${vista === "semana" ? "de la semana" : "del mes"}`} value={items ? <AnimatedNumber value={ing} tone="ok" /> : <Skeleton className="mt-1 h-7 w-32" />} tone="ok" />
+        <Stat label={`Ingresos ${vista === "semana" ? "de la semana" : "del mes"}`} value={items ? <AnimatedNumber value={ing + fijosCobrar} tone="ok" /> : <Skeleton className="mt-1 h-7 w-32" />} tone="ok" sub={fijosCobrar > 0 ? <>incluye <AnimatedNumber value={fijosCobrar} /> por cobrar</> : undefined} />
         <Stat label={`Egresos ${vista === "semana" ? "de la semana" : "del mes"}`} value={items ? <AnimatedNumber value={gas + fijosPend} tone={{ up: "danger", down: "ok" }} /> : <Skeleton className="mt-1 h-7 w-32" />} sub={
           fijosPend > 0 || pagosTarjeta > 0 ? (
             <>
@@ -336,7 +365,8 @@ export default function Movimientos() {
                   <span className="mt-1 flex h-1.5 gap-1">
                     {tot.ing > 0 && <span className="size-1.5 rounded-full bg-ok" />}
                     {tot.gas > 0 && <span className="size-1.5 rounded-full bg-danger" />}
-                    {fijosRango.some((x) => x.fecha === d && x.estado !== "pagado") && <span title="Gasto fijo por pagar" className="size-1.5 rounded-full border border-danger" />}
+                    {fijosRango.some((x) => x.fecha === d && x.estado !== "pagado" && esIngresoFijo(x)) && <span title="Ingreso fijo por cobrar" className="size-1.5 rounded-full border border-ok" />}
+                    {fijosRango.some((x) => x.fecha === d && x.estado !== "pagado" && !esIngresoFijo(x)) && <span title="Gasto fijo por pagar" className="size-1.5 rounded-full border border-danger" />}
                   </span>
                 </button>
               );
@@ -358,17 +388,22 @@ export default function Movimientos() {
                   <IconBtn label={`Agregar movimiento el ${nombre} ${ymd(diaSel).day}`} onClick={() => irAForm(diaSel)} className="bg-accent !text-accent-fg hover:bg-accent hover:opacity-90"><IconMas size={20} /></IconBtn>
                 </div>
                 <div className="space-y-2 p-3">
-                  {fijosDia.map((x) => (
-                    <div key={x.fijo.id} className="flex items-center gap-3 rounded-xl border border-dashed border-border py-2.5 pl-2.5 pr-1.5">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-full border border-dashed border-danger/50 text-danger"><IconGasto size={18} /></span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold">{x.fijo.nombre}</div>
-                        <div className="truncate text-xs text-muted">Gasto fijo por pagar · {x.fijo.categoria}</div>
+                  {fijosDia.map((x) => {
+                    const ingreso = esIngresoFijo(x);
+                    return (
+                      <div key={x.fijo.id} className="flex items-center gap-3 rounded-xl border border-dashed border-border py-2.5 pl-2.5 pr-1.5">
+                        <span className={cx("grid size-9 shrink-0 place-items-center rounded-full border border-dashed", ingreso ? "border-ok/50 text-ok" : "border-danger/50 text-danger")}>
+                          {ingreso ? <IconIngreso size={18} /> : <IconGasto size={18} />}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold">{x.fijo.nombre}</div>
+                          <div className="truncate text-xs text-muted">{ingreso ? "Ingreso fijo por cobrar" : "Gasto fijo por pagar"} · {x.fijo.categoria}</div>
+                        </div>
+                        <div className="num shrink-0 text-sm font-semibold text-muted">{ingreso ? "+" : "−"}{mxn(x.fijo.monto)}</div>
+                        <Btn small variant="primary" onClick={() => void pagarFijo(x)}>{ingreso ? "Cobrar" : "Pagar"}</Btn>
                       </div>
-                      <div className="num shrink-0 text-sm font-semibold text-muted">−{mxn(x.fijo.monto)}</div>
-                      <Btn small variant="primary" onClick={() => void pagarFijo(x)}>Pagar</Btn>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {ts.length ? ts.map(mov) : fijosDia.length ? null : (
                     <div className="py-6 text-center text-sm text-muted">
                       <p>Sin movimientos este día.</p>
@@ -415,7 +450,7 @@ export default function Movimientos() {
                 const ts = dias.flatMap((d) => porDia.get(d) ?? []);
                 return (
                   <li key={i} className="flex items-center justify-between gap-3 px-4 py-2">
-                    <span className="capitalize">{fshort(dias[0])} – {fshort(dias[dias.length - 1])}</span>
+                    <span>{fshort(dias[0])} – {fshort(dias[dias.length - 1])}</span>
                     <span className="num flex gap-3"><span className="text-ok">+{mxn(suma(ts, "ingreso"))}</span><span>−{mxn(suma(ts, "gasto"))}</span></span>
                   </li>
                 );
@@ -424,6 +459,15 @@ export default function Movimientos() {
           </div>
         </div>
       )}
+
+      <BuscarModal
+        open={buscando}
+        onClose={() => setBuscando(false)}
+        onElegir={(t) => {
+          setBuscando(false);
+          setTimeout(() => editar(t), 180); // deja terminar de cerrarse el buscador
+        }}
+      />
 
       <section className="mb-6">
         <FijosLista month={mes} lista={fijosMes} onPagar={pagarFijo} />

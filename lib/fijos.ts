@@ -30,12 +30,19 @@ export function fijosDelMes(fijos: GastoFijo[], txMes: Transaction[], month: str
       const fecha = fechaFijo(fijo, month);
       const pago = txMes.find((t) => t.fijoId === fijo.id) ?? null;
       const estado: EstadoFijo = pago ? "pagado" : fecha < today ? "vencido" : fecha === today ? "hoy" : "proximo";
-      return { fijo, fecha, estado, pago, credito: esCredito(cards.find((c) => c.id === fijo.metodo)) };
+      return { fijo, fecha, estado, pago, credito: fijo.tipo !== "ingreso" && esCredito(cards.find((c) => c.id === fijo.metodo)) };
     })
     .sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
 
-/** Total por pagar de los fijos de un mes (opcionalmente solo los que salen de tu dinero: débito o efectivo). */
+export const esIngresoFijo = (x: Pick<FijoDelMes, "fijo">) => x.fijo.tipo === "ingreso";
+
+/** Total por pagar de los gastos fijos de un mes (opcionalmente solo los que salen de tu dinero: débito o efectivo). */
 export function porPagar(lista: FijoDelMes[], soloDebito = false): number {
-  return round2(lista.filter((x) => x.estado !== "pagado" && (!soloDebito || !x.credito)).reduce((s, x) => s + x.fijo.monto, 0));
+  return round2(lista.filter((x) => !esIngresoFijo(x) && x.estado !== "pagado" && (!soloDebito || !x.credito)).reduce((s, x) => s + x.fijo.monto, 0));
+}
+
+/** Total por cobrar de los ingresos fijos de un mes. */
+export function porCobrar(lista: FijoDelMes[]): number {
+  return round2(lista.filter((x) => esIngresoFijo(x) && x.estado !== "pagado").reduce((s, x) => s + x.fijo.monto, 0));
 }

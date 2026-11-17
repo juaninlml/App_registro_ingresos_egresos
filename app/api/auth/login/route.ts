@@ -3,6 +3,7 @@ import { clearFailures, clientIp, lockedFor, registerFailure } from "@/lib/guard
 import * as store from "@/lib/store";
 import { K } from "@/lib/store";
 import { COOKIE, cookieOptions, createSessionToken } from "@/lib/session";
+import { usarCodigo } from "@/lib/recovery";
 import { verifyCode } from "@/lib/totp";
 
 export async function POST(req: Request) {
@@ -16,7 +17,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = (await req.json().catch(() => null)) as { code?: unknown } | null;
+    const body = (await req.json().catch(() => null)) as { code?: unknown; recovery?: unknown } | null;
+
+    // Entrada con un código de recuperación (si perdiste el teléfono): mismo límite de intentos
+    if (body?.recovery !== undefined) {
+      if (!(await usarCodigo(body.recovery))) {
+        await registerFailure(ip);
+        return NextResponse.json({ error: "Código de recuperación incorrecto o ya usado." }, { status: 401 });
+      }
+      await clearFailures(ip);
+      const res = NextResponse.json({ ok: true, recuperacion: true });
+      res.cookies.set(COOKIE, await createSessionToken(), cookieOptions);
+      return res;
+    }
+
     const secret = await store.get<string>(K.totp);
     if (!secret) {
       return NextResponse.json({ error: "Aún no configuras Google Authenticator.", needsSetup: true }, { status: 409 });

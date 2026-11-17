@@ -34,7 +34,8 @@ Sube el repo a GitHub, impórtalo en Vercel y despliega (no requiere configuraci
 2. Después de configurarlo, `/setup` queda bloqueado. Puedes borrar `SETUP_KEY` de Vercel.
 3. Entra en **Ajustes → Importar respaldo** y selecciona `datos-iniciales.json` (tus datos del Excel).
 
-> Si pierdes el Authenticator: en el editor SQL de Neon ejecuta `DELETE FROM kv WHERE key = 'fin:auth:totp';` y repite el paso 4.
+> **Si pierdes el teléfono:** en el login usa «¿Perdiste tu teléfono?» con uno de tus **códigos de recuperación** (se generan en Ajustes → Seguridad) y luego, en Ajustes → Seguridad → **Cambiar teléfono**, vincula el nuevo.
+> Sin códigos, el último recurso es el editor SQL de Neon: `DELETE FROM kv WHERE key = 'fin:auth:totp';` y repetir el paso 4.
 
 ## Desarrollo local
 ```bash

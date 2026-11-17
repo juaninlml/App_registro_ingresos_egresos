@@ -91,10 +91,20 @@ export function validateValue(key: DBKey | `tx:${string}`, v: unknown): boolean 
       );
     }
     case "fijos":
-      return list(v, FIJO, (o) => (o.dia as number) >= 1 && (o.dia as number) <= 31 && (o.monto as number) > 0 && (o.desde === undefined || (typeof o.desde === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(o.desde))));
+      return list(v, FIJO, (o) => (o.tipo === undefined || o.tipo === "gasto" || o.tipo === "ingreso") && (o.dia as number) >= 1 && (o.dia as number) <= 31 && (o.monto as number) > 0 && (o.desde === undefined || (typeof o.desde === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(o.desde))));
     case "settings": {
       const s = v as Record<string, unknown> | null;
-      return !!s && typeof s === "object" && strList(s.categoriasGasto) && strList(s.categoriasIngreso);
+      const numMap = (m: unknown) =>
+        m === undefined || (!!m && typeof m === "object" && !Array.isArray(m) && Object.keys(m).length <= 100 &&
+          Object.entries(m).every(([k, x]) => k.length <= 60 && typeof x === "number" && Number.isFinite(x) && x >= 0 && x < 1e10));
+      const notas = (m: unknown) =>
+        m === undefined || (!!m && typeof m === "object" && !Array.isArray(m) && Object.keys(m).length <= 240 &&
+          Object.entries(m).every(([k, x]) => /^\d{4}-(0[1-9]|1[0-2])$/.test(k) && typeof x === "string" && x.length <= 2000));
+      return (
+        !!s && typeof s === "object" && strList(s.categoriasGasto) && strList(s.categoriasIngreso) &&
+        numMap(s.presupuestos) && (s.metaAhorro === undefined || (typeof s.metaAhorro === "number" && s.metaAhorro >= 0 && s.metaAhorro < 1e10)) &&
+        notas(s.notasMes)
+      );
     }
   }
 }

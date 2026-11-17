@@ -4,14 +4,15 @@ import { useState } from "react";
 import { readTxMonth, useData, useTxMonths } from "@/components/DataProvider";
 import { DisponibleCard, useComprasCredito } from "@/components/Cuentas";
 import { FijosLista, movimientoDeFijo } from "@/components/Fijos";
-import { IconGasto } from "@/components/icons";
+import { PresupuestoMes } from "@/components/Presupuesto";
+import { IconGasto, IconIngreso, IconLibreta } from "@/components/icons";
 import { useToast } from "@/components/motion";
 import { creditos } from "@/lib/cuentas";
-import { fijosDelMes, porPagar, type FijoDelMes } from "@/lib/fijos";
+import { esIngresoFijo, fijosDelMes, porCobrar, porPagar, type FijoDelMes } from "@/lib/fijos";
 import { Bars, Donut, GroupedBars, Legend, LineArea } from "@/components/charts";
 import { IconAdelante } from "@/components/icons";
 import { AnimatedNumber } from "@/components/motion";
-import { Badge, Card, Empty, PageHeader, Section, Skeleton, Stat, cx } from "@/components/ui";
+import { Badge, Btn, Card, Empty, PageHeader, Section, Skeleton, Stat, cx } from "@/components/ui";
 import { buildAlerts } from "@/lib/alerts";
 import { addMonthKey, daysBetween, fdate, fmonth, fshort, monthKey } from "@/lib/dates";
 import { abonadoDesdeCorte, deudaActual, latestStatement, projectCuts } from "@/lib/finance";
@@ -52,13 +53,21 @@ export default function Resumen() {
   const fijosMes = txs ? fijosDelMes(db.fijos, txs[mes] ?? [], mes, today, db.cards) : null;
   const fijosPend = fijosMes ? porPagar(fijosMes) : 0;
   const egresosMes = actual.gas + fijosPend;
+  const fijosCobrar = fijosMes ? porCobrar(fijosMes) : 0;
+  const ingresosMes = actual.ing + fijosCobrar;
 
   async function pagarFijo(x: FijoDelMes) {
     const t = movimientoDeFijo(x.fijo, mes, today);
     const m = t.fecha.slice(0, 7);
     try {
       if (await commit([{ key: `tx:${m}`, value: [...(await readTxMonth(m)), t] }])) {
-        toast({ tone: "danger", icon: <IconGasto size={18} />, title: `${x.fijo.nombre} pagado`, detail: `−${mxn(t.monto)} · ${x.credito ? "con tarjeta de crédito" : x.fijo.metodo ? "de tu débito" : "en efectivo"}` });
+        const ingreso = esIngresoFijo(x);
+        toast({
+          tone: ingreso ? "ok" : "danger",
+          icon: ingreso ? <IconIngreso size={18} /> : <IconGasto size={18} />,
+          title: `${x.fijo.nombre} ${ingreso ? "cobrado" : "pagado"}`,
+          detail: `${ingreso ? "+" : "−"}${mxn(t.monto)} · ${x.credito ? "con tarjeta de crédito" : x.fijo.metodo ? (ingreso ? "a tu débito" : "de tu débito") : "en efectivo"}`,
+        });
       }
     } catch (e) {
       toast({ tone: "danger", title: "No se pudo registrar el pago", detail: (e as Error).message });
@@ -98,7 +107,7 @@ export default function Resumen() {
 
   return (
     <>
-      <PageHeader title="Resumen" sub={fdate(today)} />
+      <PageHeader title="Resumen" sub={fdate(today)} actions={<Link href="/cierre"><Btn small><IconLibreta size={16} />Cierre de mes</Btn></Link>} />
 
       <DisponibleCard />
 
@@ -130,15 +139,15 @@ export default function Resumen() {
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat label="Deuda en tarjetas" value={<AnimatedNumber value={deudaTarjetas} tone={{ up: "danger", down: "ok" }} />} sub={comprasTotal > 0 ? <>Al corte + <AnimatedNumber value={comprasTotal} /> en compras − abonos</> : "Saldo al corte menos tus abonos"} />
           <Stat label="Saldo de créditos" value={<AnimatedNumber value={prestamos} tone={{ up: "danger", down: "ok" }} />} sub={`${db.loans.length} crédito${db.loans.length === 1 ? "" : "s"}`} />
-          <Stat label={`Ingresos ${mesCorto(mes)}`} value={txs ? <AnimatedNumber value={actual.ing} tone="ok" /> : <Skeleton className="mt-1 h-7 w-28" />} tone="ok" />
+          <Stat label={`Ingresos ${mesCorto(mes)}`} value={txs ? <AnimatedNumber value={ingresosMes} tone="ok" /> : <Skeleton className="mt-1 h-7 w-28" />} tone="ok" sub={fijosCobrar > 0 ? `incluye ${mxn(fijosCobrar)} por cobrar` : undefined} />
           <Stat
             label={`Egresos ${mesCorto(mes)}`}
             value={txs ? <AnimatedNumber value={egresosMes} tone={{ up: "danger", down: "ok" }} /> : <Skeleton className="mt-1 h-7 w-28" />}
-            tone={egresosMes > actual.ing && actual.ing > 0 ? "danger" : undefined}
+            tone={egresosMes > ingresosMes && ingresosMes > 0 ? "danger" : undefined}
             sub={txs ? (
               <>
                 {fijosPend > 0 && <span className="block">incluye {mxn(fijosPend)} de fijos por pagar</span>}
-                <span className="block">Balance <AnimatedNumber value={actual.ing - egresosMes} tone={{ up: "ok", down: "danger" }} /></span>
+                <span className="block">Balance <AnimatedNumber value={ingresosMes - egresosMes} tone={{ up: "ok", down: "danger" }} /></span>
               </>
             ) : undefined}
           />
@@ -148,6 +157,8 @@ export default function Resumen() {
       <section className="mb-6">
         <FijosLista month={mes} lista={fijosMes} onPagar={pagarFijo} compacto />
       </section>
+
+      <PresupuestoMes mes={mes} txMes={txs ? txs[mes] ?? [] : null} fijosMes={fijosMes} ingresosMes={ingresosMes} egresosMes={egresosMes} />
 
       {proximos.length > 0 && (
         <Section title="Próximos pagos de tarjetas">
@@ -180,7 +191,7 @@ export default function Resumen() {
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-sm font-semibold capitalize">En qué gastas · {fmonth(mes)}</h2>
+          <h2 className="mb-3 text-sm font-semibold">En qué gastas · {fmonth(mes)}</h2>
           {donut.length ? <Donut items={donut} aria={`Gastos por categoría de ${fmonth(mes)}`} /> : (txs ? <p className="py-10 text-center text-sm text-muted">Sin gastos este mes.</p> : <Skeleton className="h-40" />)}
         </Card>
 

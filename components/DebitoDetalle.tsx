@@ -63,12 +63,12 @@ export function DebitoDetalle({ card }: { card: CardT }) {
       </div>
 
       {fijos.some((x) => x.estado !== "pagado") && (
-        <Section title="Gastos fijos que salen de esta tarjeta">
+        <Section title="Fijos pendientes de esta tarjeta">
           <Card className="divide-y divide-border/60 p-0 sm:p-0">
             {fijos.filter((x) => x.estado !== "pagado").map((x) => (
               <div key={x.fijo.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
                 <span className="min-w-0 truncate"><span className="font-semibold">{x.fijo.nombre}</span> <span className="text-muted">· {fshort(x.fecha)}</span></span>
-                <span className="num shrink-0 font-semibold">−{mxn(x.fijo.monto)}</span>
+                <span className={`num shrink-0 font-semibold ${x.fijo.tipo === "ingreso" ? "text-ok" : ""}`}>{x.fijo.tipo === "ingreso" ? "+" : "−"}{mxn(x.fijo.monto)}</span>
               </div>
             ))}
           </Card>

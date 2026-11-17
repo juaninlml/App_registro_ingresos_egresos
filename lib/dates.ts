@@ -85,6 +85,11 @@ const fMonth = new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric"
 export const fdate = (d: ISODate) => fDate.format(parse(d)).replace(/\./g, "");
 export const fshort = (d: ISODate) => fShort.format(parse(d)).replace(/\./g, "");
 export const fmonth = (key: string) => fMonth.format(parse(`${key}-01`));
+/** «Noviembre de 2026» (solo la primera letra en mayúscula), para títulos. */
+export const fmesTitulo = (key: string) => {
+  const s = fmonth(key);
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
 
 /** Lunes de la semana (lunes a domingo) que contiene `d`. */
 export function lunesDe(d: ISODate): ISODate {

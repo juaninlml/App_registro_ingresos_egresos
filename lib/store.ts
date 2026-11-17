@@ -164,4 +164,6 @@ export const K = {
   lastStep: "fin:auth:laststep",
   failIp: (ip: string) => `fin:auth:fail:ip:${ip}`,
   failAll: "fin:auth:fail:all",
+  recovery: "fin:auth:recovery",
+  pendingReenroll: "fin:auth:pending:reenroll",
 } as const;
