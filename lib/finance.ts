@@ -79,7 +79,11 @@ export function horizonte(card: Card, msis: Msi[]): number {
  * Proyección por corte. El primer corte usa el monto real del último estado de cuenta;
  * los siguientes suman los pagos mensuales de los MSI vigentes más las compras estimadas.
  */
-export function projectCuts(card: Card, msis: Msi[], comprasEstimadas = 0, months?: number, comprasProximo = 0): CutRow[] {
+/**
+ * `comprasProximo`: compras ya hechas con la tarjeta antes del siguiente corte (sin las que son MSI). Si se
+ * da, ese corte usa exactamente MSI + esas compras; el estimado solo aplica a los cortes posteriores.
+ */
+export function projectCuts(card: Card, msis: Msi[], comprasEstimadas = 0, months?: number, comprasProximo?: number): CutRow[] {
   const st = latestStatement(card);
   if (!st) return [];
   const mine = msis.filter((m) => m.cardId === card.id);
@@ -105,8 +109,8 @@ export function projectCuts(card: Card, msis: Msi[], comprasEstimadas = 0, month
         compras: round2(Math.max(0, st.pagoNoIntereses - msiTotal)), real: true, terminan, detalle,
       });
     } else {
-      // el siguiente corte lleva al menos lo que ya compraste en el periodo (o tu estimado, si es mayor)
-      const compras = i === 1 ? round2(Math.max(comprasEstimadas, comprasProximo)) : comprasEstimadas;
+      // el siguiente corte lleva exactamente lo que ya compraste antes de él; los demás, el estimado
+      const compras = i === 1 && comprasProximo !== undefined ? round2(comprasProximo) : comprasEstimadas;
       rows.push({
         i, corte, limite: i === 1 ? limiteDeCorte(st, corte) : nextBusinessDay(addDays(corte, 19)), total: round2(msiTotal + compras),
         msiTotal, compras, real: false, terminan, detalle,

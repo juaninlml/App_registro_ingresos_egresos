@@ -18,7 +18,7 @@ export default function Proyeccion() {
   if (!card) return <><PageHeader title="Proyección por corte" /><Empty>Primero agrega una tarjeta de crédito.</Empty></>;
   const st = latestStatement(card);
   // el siguiente corte lleva al menos las compras que ya registraste con la tarjeta
-  const yaComprado = st ? proximoPago(card, db.msi, comprasCredito?.[card.id]?.lista ?? [], st).comprasTotal : 0;
+  const yaComprado = st && comprasCredito ? proximoPago(card, db.msi, comprasCredito[card.id]?.lista ?? [], st).comprasTotal : undefined;
   const rows = projectCuts(card, db.msi, Number(compras) || 0, undefined, yaComprado);
   const msis = db.msi.filter((m) => m.cardId === card.id);
   const nombre = (id: string) => msis.find((m) => m.id === id)?.descripcion ?? "?";
@@ -32,7 +32,7 @@ export default function Proyeccion() {
             {credito.map((c) => <option key={c.id} value={c.id}>{c.banco} {c.nombre}</option>)}
           </Select>
         </Field>
-        <Field label="Compras estimadas por corte" hint="Compras regulares futuras (0 si ya no usarás la tarjeta)">
+        <Field label="Compras estimadas por corte" hint="Para los cortes después del siguiente; el siguiente usa las compras que ya registraste.">
           <NumInput value={compras} onChange={setCompras} min={0} />
         </Field>
       </Card>

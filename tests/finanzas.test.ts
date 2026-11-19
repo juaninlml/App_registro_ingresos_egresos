@@ -159,10 +159,23 @@ describe("próximo pago y crédito ocupado por MSI", () => {
     assert.equal(c.ocupado, 14000);
   });
 
-  it("la proyección del siguiente corte usa lo ya comprado si supera el estimado", () => {
-    const filas = projectCuts(card, [laptop], 200, 3, 500);
-    assert.equal(filas[1].compras, 500);
-    assert.equal(filas[1].total, 2500);
-    assert.equal(filas[2].compras, 200); // los cortes siguientes siguen con el estimado
+  it("el siguiente corte usa exactamente las compras hechas antes de él (no el estimado)", () => {
+    const menos = projectCuts(card, [laptop], 1500, 3, 500);
+    assert.equal(menos[1].compras, 500); // aunque el estimado sea mayor
+    assert.equal(menos[1].total, 2500); // 2,000 de la laptop + 500
+    const mas = projectCuts(card, [laptop], 200, 3, 800);
+    assert.equal(mas[1].total, 2800);
+    assert.equal(mas[2].compras, 200); // los cortes siguientes siguen con el estimado
+  });
+
+  it("sin compras registradas el siguiente corte usa el estimado", () => {
+    assert.equal(projectCuts(card, [laptop], 300, 3)[1].compras, 300);
+  });
+
+  it("el plan cobra en el siguiente corte lo mismo que el próximo pago de la tarjeta", () => {
+    const p = proximoPago(card, [laptop, tele], compras, st);
+    const cortes = projectCuts(card, [laptop, tele], 1500, 3, p.comprasTotal);
+    assert.equal(cortes[1].total, p.total); // 3,500 = 3,000 de MSI + 500 de compras
+    assert.equal(cortes[1].limite, p.limite);
   });
 });

@@ -85,7 +85,7 @@ export default function Resumen() {
   const vence = new Map<string, number>();
   for (const c of creditos(db.cards)) {
     const stc = latestStatement(c);
-    const prox = stc ? proximoPago(c, db.msi, compras?.[c.id]?.lista ?? [], stc).comprasTotal : 0;
+    const prox = stc && compras ? proximoPago(c, db.msi, compras[c.id]?.lista ?? [], stc).comprasTotal : undefined;
     for (const r of projectCuts(c, db.msi, db.plan?.cardId === c.id ? db.plan.comprasEstimadas : 0, 7, prox)) {
       const k = monthKey(r.limite);
       vence.set(k, (vence.get(k) ?? 0) + r.total);
@@ -96,7 +96,7 @@ export default function Resumen() {
   // Deuda proyectada con el plan
   const plan = db.plan && db.cards.find((c) => c.id === db.plan!.cardId);
   const stPlan = plan ? latestStatement(plan) : null;
-  const planRes = plan && db.plan ? buildPlan(db.plan, plan, db.msi, db.payments, today, stPlan ? proximoPago(plan, db.msi, compras?.[plan.id]?.lista ?? [], stPlan).comprasTotal : 0) : null;
+  const planRes = plan && db.plan ? buildPlan(db.plan, plan, db.msi, db.payments, today, stPlan && compras ? proximoPago(plan, db.msi, compras[plan.id]?.lista ?? [], stPlan).comprasTotal : undefined) : null;
   let deudaSerie: { v: number[]; l: string[] } | null = null;
   if (planRes?.weeks.length) {
     const fin = planRes.liquidacion ? planRes.weeks.indexOf(planRes.liquidacion) + 1 : planRes.weeks.length;

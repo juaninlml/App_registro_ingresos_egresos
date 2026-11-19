@@ -53,8 +53,8 @@ function montoBase(plan: PlanConfig, lunes: ISODate): number {
  *  - Lo abonado se acumula como saldo a favor y, en la semana de cada fecha límite, se descuenta el pago del corte.
  *  - La deuda restante supone que todo lo abonado se aplica a reducir el capital (hay que pedírselo al banco).
  */
-/** `comprasProximo`: compras ya registradas para el siguiente corte (se usan si superan el estimado). */
-export function buildPlan(plan: PlanConfig, card: Card, msis: Msi[], payments: Payment[], today: ISODate, comprasProximo = 0): PlanResult {
+/** `comprasProximo`: compras hechas antes del siguiente corte; ese corte usa MSI + esas compras exactas. */
+export function buildPlan(plan: PlanConfig, card: Card, msis: Msi[], payments: Payment[], today: ISODate, comprasProximo?: number): PlanResult {
   const st = latestStatement(card);
   if (!st) return { cuts: [], weeks: [], liquidacion: null, ultimoVencimientoMSI: null, remanenteFinal: 0, deudaInicial: 0 };
   const cuts = projectCuts(card, msis, plan.comprasEstimadas, undefined, comprasProximo);
@@ -126,7 +126,7 @@ export interface Sugerencias {
   semanasLiquidar: number;
 }
 
-export function sugerencias(plan: PlanConfig, card: Card, msis: Msi[], payments: Payment[], today: ISODate, deuda: number, comprasProximo = 0): Sugerencias {
+export function sugerencias(plan: PlanConfig, card: Card, msis: Msi[], payments: Payment[], today: ISODate, deuda: number, comprasProximo?: number): Sugerencias {
   const base = buildPlan(plan, card, msis, payments, today, comprasProximo);
   if (!base.cuts.length) return { minimo: null, liquidar: null, semanasLiquidar: 0 };
   const futuras = (r: PlanResult) => r.weeks.filter((w) => w.domingo >= today);

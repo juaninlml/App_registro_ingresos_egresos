@@ -5,12 +5,12 @@ import { useComprasCredito } from "@/components/Cuentas";
 import { AnimatedNumber } from "@/components/motion";
 import { useData } from "@/components/DataProvider";
 import { IconCerrar } from "@/components/icons";
-import { Badge, Btn, Card, Empty, Field, IconBtn, Input, NumInput, PageHeader, Section, Stat, TableWrap, cx, td, th } from "@/components/ui";
+import { Badge, Btn, Card, Empty, Field, IconBtn, Input, NumInput, PageHeader, Progress, Section, Stat, TableWrap, cx, td, th } from "@/components/ui";
 import { fdate, fshort, weekday } from "@/lib/dates";
 import { creditos } from "@/lib/cuentas";
-import { deudaActual, latestStatement, proximoPago } from "@/lib/finance";
+import { abonadoDesdeCorte, deudaActual, latestStatement, proximoPago } from "@/lib/finance";
 import Link from "next/link";
-import { mxn } from "@/lib/money";
+import { mxn, round2 } from "@/lib/money";
 import { buildPlan, conAbono, defaultPlan, proximoLunes, sugerencias } from "@/lib/plan";
 import type { Card as CardT, PlanConfig } from "@/lib/types";
 
@@ -39,7 +39,8 @@ export default function Plan() {
   const plan: PlanConfig = db.plan && db.plan.cardId === card.id ? db.plan : defaultPlan(card);
   const st0 = latestStatement(card)!;
   // compras ya registradas para el siguiente corte (sin las que son MSI)
-  const comprasProx = proximoPago(card, db.msi, compras?.[card.id]?.lista ?? [], st0).comprasTotal;
+  const prox = proximoPago(card, db.msi, compras?.[card.id]?.lista ?? [], st0);
+  const comprasProx = compras ? prox.comprasTotal : undefined;
   const res = buildPlan(plan, card, db.msi, db.payments, today, comprasProx);
   const guardado = db.plan?.cardId === card.id;
   const setPlan = (p: PlanConfig) => save("plan", p);
@@ -51,6 +52,13 @@ export default function Plan() {
   const simPend = sim ? sim.weeks.filter((w) => w.domingo >= today && w.pendiente > 0.005) : [];
   const aplicar = (m: number) => setPlan(conAbono(plan, m, today));
   const semActual = res.weeks.find((w) => w.lunes <= today && today <= w.domingo);
+
+  // Siguiente corte: lo que hay que pagar (MSI + compras antes del corte) y lo acumulado para él.
+  // Lo abonado desde el corte primero cubre el pago del corte actual; lo que sobra ya cuenta para el siguiente.
+  const abonadoCorte = abonadoDesdeCorte(card, db.payments, st);
+  const faltaActual = Math.max(0, round2(st.pagoNoIntereses - abonadoCorte));
+  const acumulado = Math.max(0, round2(abonadoCorte - st.pagoNoIntereses));
+  const semLimite = res.weeks.find((w) => w.lunes <= prox.limite && prox.limite <= w.domingo);
 
   return (
     <>
@@ -65,6 +73,56 @@ export default function Plan() {
         <Stat label="Último vencimiento MSI" value={res.ultimoVencimientoMSI ? fshort(res.ultimoVencimientoMSI) : "—"} />
         <Stat label="Esta semana" value={semActual ? mxn(semActual.abono) : "—"} sub={semActual ? `Vence ${mxn(semActual.vence)}` : undefined} />
       </div>
+
+      <Section title={`Siguiente corte · ${fshort(prox.corte)}`}>
+        <Card>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <div className="text-xs font-medium text-muted">Total a pagar</div>
+              <div className="mt-1 text-2xl font-semibold">{compras ? <AnimatedNumber value={prox.total} tone={{ up: "danger", down: "ok" }} /> : "…"}</div>
+              <div className="mt-0.5 text-xs text-muted">Límite aprox. {fdate(prox.limite)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-muted">Llevas acumulado</div>
+              <div className="mt-1 text-2xl font-semibold text-ok"><AnimatedNumber value={Math.min(acumulado, prox.total)} tone="ok" /></div>
+              <div className="mt-2"><Progress value={acumulado} max={prox.total} tone="ok" label="Acumulado para el siguiente corte" /></div>
+              <div className="mt-1 text-xs text-muted">
+                {prox.total <= 0 ? "Sin pagos en ese corte" : acumulado >= prox.total ? "¡Ya está cubierto!" : `Faltan ${mxn(prox.total - acumulado)}`}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-muted">Con tu plan, al {fshort(prox.limite)}</div>
+              <div className="mt-1 text-2xl font-semibold">{semLimite ? <AnimatedNumber value={semLimite.disponible} /> : "—"}</div>
+              <div className="mt-1">
+                {semLimite && (semLimite.pendiente > 0.005 ? <Badge tone="warn">Faltarían {mxn(semLimite.pendiente)}</Badge> : <Badge tone="ok">Alcanza</Badge>)}
+              </div>
+            </div>
+          </div>
+
+          <ul className="mt-4 divide-y divide-border/60 border-t border-border text-sm">
+            {prox.msi.map((x) => (
+              <li key={x.m.id} className="flex items-baseline justify-between gap-3 py-2">
+                <span className="min-w-0 truncate">{x.m.descripcion} <span className="text-muted">· mensualidad {x.k} de {x.m.totalPagos}</span></span>
+                <span className="num shrink-0">{mxn(x.m.pagoMensual)}</span>
+              </li>
+            ))}
+            <li className="flex items-baseline justify-between gap-3 py-2">
+              <span className="min-w-0 truncate">Compras antes del corte <span className="text-muted">· {compras ? `${prox.compras.length} registrada${prox.compras.length === 1 ? "" : "s"} desde el ${fshort(st.fechaCorte)}` : "…"}</span></span>
+              <span className="num shrink-0">{compras ? mxn(prox.comprasTotal) : "…"}</span>
+            </li>
+            <li className="flex items-baseline justify-between gap-3 py-2 font-semibold">
+              <span>Total del corte <span className="font-normal text-muted">· {mxn(prox.msiTotal)} de MSI + {mxn(prox.comprasTotal)} de compras</span></span>
+              <span className="num shrink-0">{mxn(prox.total)}</span>
+            </li>
+          </ul>
+          <p className="mt-2 text-xs text-muted">
+            {faltaActual > 0
+              ? `Lo que abones primero cubre el corte actual (faltan ${mxn(faltaActual)} para el ${fshort(st.fechaLimite)}); lo que pase de ahí se acumula para este corte.`
+              : "El corte actual ya está cubierto: todo lo que abones se acumula para este corte."}{" "}
+            Las compras que también capturaste como MSI no se cuentan dos veces.
+          </p>
+        </Card>
+      </Section>
 
       <Section title="Calculadora de abono semanal">
         <Card>
@@ -151,7 +209,7 @@ export default function Plan() {
 
       <Section title="Compras estimadas">
         <Card className="grid items-end gap-3 sm:grid-cols-2">
-          <Field label="Compras por corte (después del primero)" hint="0 si ya no usarás la tarjeta"><NumInput value={plan.comprasEstimadas} onChange={(n) => setPlan({ ...plan, comprasEstimadas: Number(n) || 0 })} min={0} /></Field>
+          <Field label="Compras estimadas por corte" hint="Para los cortes después del siguiente; el siguiente usa las compras que ya registraste. 0 si ya no usarás la tarjeta."><NumInput value={plan.comprasEstimadas} onChange={(n) => setPlan({ ...plan, comprasEstimadas: Number(n) || 0 })} min={0} /></Field>
           <p className="text-xs text-muted">Los abonos se suponen aplicados a capital: pide al banco que el saldo a favor liquide los pagos pendientes.</p>
         </Card>
       </Section>
