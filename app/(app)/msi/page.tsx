@@ -1,20 +1,25 @@
 "use client";
 import { useState } from "react";
+import { useComprasCredito } from "@/components/Cuentas";
 import { useData } from "@/components/DataProvider";
 import { Badge, Card, Empty, Field, NumInput, PageHeader, Select, TableWrap, td, th } from "@/components/ui";
 import { fdate, fshort } from "@/lib/dates";
 import { creditos } from "@/lib/cuentas";
-import { projectCuts } from "@/lib/finance";
+import { latestStatement, projectCuts, proximoPago } from "@/lib/finance";
 import { mxn } from "@/lib/money";
 
 export default function Proyeccion() {
   const { db } = useData();
   const [sel, setSel] = useState("");
   const [compras, setCompras] = useState<number | "">(db.plan?.comprasEstimadas ?? 0);
+  const comprasCredito = useComprasCredito();
   const credito = creditos(db.cards);
   const card = credito.find((c) => c.id === sel) ?? credito[0];
   if (!card) return <><PageHeader title="Proyección por corte" /><Empty>Primero agrega una tarjeta de crédito.</Empty></>;
-  const rows = projectCuts(card, db.msi, Number(compras) || 0);
+  const st = latestStatement(card);
+  // el siguiente corte lleva al menos las compras que ya registraste con la tarjeta
+  const yaComprado = st ? proximoPago(card, db.msi, comprasCredito?.[card.id]?.lista ?? [], st).comprasTotal : 0;
+  const rows = projectCuts(card, db.msi, Number(compras) || 0, undefined, yaComprado);
   const msis = db.msi.filter((m) => m.cardId === card.id);
   const nombre = (id: string) => msis.find((m) => m.id === id)?.descripcion ?? "?";
 

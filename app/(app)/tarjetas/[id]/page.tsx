@@ -12,7 +12,7 @@ import { ImportStatement } from "@/components/ImportStatement";
 import { esDebito } from "@/lib/cuentas";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Progress, Section, Skeleton, TableWrap, td, th } from "@/components/ui";
 import { addDays, addMonths, daysBetween, fdate, fshort, isISO, nextBusinessDay } from "@/lib/dates";
-import { abonadoDesdeCorte, deudaActual, latestStatement, msiInfo, primerCorteSugerido } from "@/lib/finance";
+import { abonadoDesdeCorte, creditoMsi, deudaActual, latestStatement, msiInfo, primerCorteSugerido, proximoPago } from "@/lib/finance";
 import { mxn, round2, uid } from "@/lib/money";
 import type { Msi, Payment, Statement } from "@/lib/types";
 
@@ -42,6 +42,9 @@ export default function TarjetaDetalle() {
   const ref = st?.fechaCorte ?? today;
   const infos = msis.map((m) => ({ m, i: msiInfo(m, ref) }));
   const activos = infos.filter((x) => !x.i.liquidado);
+  // siguiente corte: mensualidades de MSI + compras registradas antes del corte; y crédito que ocupan los MSI
+  const proximo = st ? proximoPago(card, db.msi, misCompras?.lista ?? [], st) : null;
+  const credito = creditoMsi(msis, ref);
   const pagos = db.payments.filter((p) => p.destino === "card" && p.targetId === card.id).sort((a, b) => b.fecha.localeCompare(a.fecha));
   const d = st ? daysBetween(today, st.fechaLimite) : null;
 
@@ -133,6 +136,42 @@ export default function TarjetaDetalle() {
       )}
 
       {st && (
+        <Section title={`Próximo pago · corte del ${fshort(proximo!.corte)}`}>
+          <Card>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <div className="text-xs font-medium text-muted">Pago estimado para no generar intereses</div>
+                <div className="mt-1 text-2xl font-semibold">{misCompras ? <AnimatedNumber value={proximo!.total} tone={{ up: "danger", down: "ok" }} /> : <Skeleton className="h-8 w-36" />}</div>
+                <div className="mt-0.5 text-xs text-muted">Límite aproximado {fdate(proximo!.limite)}</div>
+              </div>
+              {today > proximo!.corte && <Badge tone="warn">Ya pasó el corte: sube el estado de cuenta</Badge>}
+            </div>
+            <ul className="mt-4 divide-y divide-border/60 border-t border-border text-sm">
+              <li className="flex items-baseline justify-between gap-3 py-2">
+                <span className="min-w-0">
+                  <span className="font-medium">Meses sin intereses</span>
+                  <span className="block truncate text-xs text-muted">
+                    {proximo!.msi.length ? proximo!.msi.map((x) => `${x.m.descripcion} ${x.k}/${x.m.totalPagos}`).join(" · ") : "Ninguna mensualidad en este corte"}
+                  </span>
+                </span>
+                <span className="num shrink-0 font-semibold">{mxn(proximo!.msiTotal)}</span>
+              </li>
+              <li className="flex items-baseline justify-between gap-3 py-2">
+                <span className="min-w-0">
+                  <span className="font-medium">Compras antes del corte</span>
+                  <span className="block truncate text-xs text-muted">
+                    {misCompras ? `${proximo!.compras.length} compra${proximo!.compras.length === 1 ? "" : "s"} registrada${proximo!.compras.length === 1 ? "" : "s"} desde el ${fshort(st.fechaCorte)}` : "…"}
+                  </span>
+                </span>
+                <span className="num shrink-0 font-semibold">{misCompras ? mxn(proximo!.comprasTotal) : "…"}</span>
+              </li>
+            </ul>
+            <p className="mt-2 text-xs text-muted">Es una estimación con lo que registras en Movimientos; el monto exacto sale en tu siguiente estado de cuenta. Las compras que también capturaste como MSI no se cuentan dos veces.</p>
+          </Card>
+        </Section>
+      )}
+
+      {st && (
         <Section title="Deuda real">
           <Card>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -183,6 +222,32 @@ export default function TarjetaDetalle() {
       </div>
 
       <Section title={`Meses sin intereses (${activos.length} activos)`} actions={<Btn small variant="primary" onClick={() => { setEditMsi(null); setModal("msi"); }}><IconMas size={16} />Agregar MSI</Btn>}>
+        {msis.length > 0 && credito.activos > 0 && (
+          <Card className="mb-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <div className="text-xs font-medium text-muted">Ocupando tu crédito</div>
+                <div className="mt-1 text-lg font-semibold sm:text-xl"><AnimatedNumber value={credito.ocupado} tone={{ up: "danger", down: "ok" }} /></div>
+                <div className="mt-0.5 text-xs text-muted">Falta por pagar</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted">Ya liberado</div>
+                <div className="mt-1 text-lg font-semibold text-ok sm:text-xl"><AnimatedNumber value={credito.liberado} tone="ok" /></div>
+                <div className="mt-0.5 text-xs text-muted">de {mxn(credito.total)}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted">Se libera al pagar</div>
+                <div className="mt-1 text-lg font-semibold sm:text-xl">{mxn(credito.liberaProximo)}</div>
+                <div className="mt-0.5 text-xs text-muted">en el corte del {fshort(addMonths(ref, 1))}</div>
+              </div>
+            </div>
+            <div className="mt-3"><Progress value={credito.liberado} max={credito.total} tone="ok" label="Crédito de MSI ya liberado" /></div>
+            <div className="mt-1 text-xs text-muted">
+              {Math.round((credito.liberado / (credito.total || 1)) * 100)}% liberado
+              {card.limite ? ` · los MSI ocupan ${Math.round((credito.ocupado / card.limite) * 100)}% de tu límite de ${mxn(card.limite)}` : ""}
+            </div>
+          </Card>
+        )}
         {!msis.length ? (
           <Empty>Sin cargos a meses.</Empty>
         ) : (

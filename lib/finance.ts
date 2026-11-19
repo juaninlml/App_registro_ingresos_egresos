@@ -1,4 +1,4 @@
-import { addDays, addMonths, monthsDiff, nextBusinessDay } from "./dates";
+import { addDays, addMonths, daysBetween, monthsDiff, nextBusinessDay, weekday } from "./dates";
 import { round2 } from "./money";
 import type { Card, ISODate, Msi, Payment, Statement, Transaction } from "./types";
 
@@ -79,7 +79,7 @@ export function horizonte(card: Card, msis: Msi[]): number {
  * Proyección por corte. El primer corte usa el monto real del último estado de cuenta;
  * los siguientes suman los pagos mensuales de los MSI vigentes más las compras estimadas.
  */
-export function projectCuts(card: Card, msis: Msi[], comprasEstimadas = 0, months?: number): CutRow[] {
+export function projectCuts(card: Card, msis: Msi[], comprasEstimadas = 0, months?: number, comprasProximo = 0): CutRow[] {
   const st = latestStatement(card);
   if (!st) return [];
   const mine = msis.filter((m) => m.cardId === card.id);
@@ -105,9 +105,11 @@ export function projectCuts(card: Card, msis: Msi[], comprasEstimadas = 0, month
         compras: round2(Math.max(0, st.pagoNoIntereses - msiTotal)), real: true, terminan, detalle,
       });
     } else {
+      // el siguiente corte lleva al menos lo que ya compraste en el periodo (o tu estimado, si es mayor)
+      const compras = i === 1 ? round2(Math.max(comprasEstimadas, comprasProximo)) : comprasEstimadas;
       rows.push({
-        i, corte, limite: nextBusinessDay(addDays(corte, 19)), total: round2(msiTotal + comprasEstimadas),
-        msiTotal, compras: comprasEstimadas, real: false, terminan, detalle,
+        i, corte, limite: i === 1 ? limiteDeCorte(st, corte) : nextBusinessDay(addDays(corte, 19)), total: round2(msiTotal + compras),
+        msiTotal, compras, real: false, terminan, detalle,
       });
     }
   }
@@ -136,4 +138,65 @@ export const totalCompras = (ts: Transaction[]) => round2(ts.reduce((s, t) => s 
 /** Deuda total hoy: saldo del último corte, más las compras hechas después del corte, menos lo abonado. */
 export function deudaActual(card: Card, payments: Payment[], st: Statement, compras = 0): number {
   return round2(Math.max(0, st.saldoTotal + compras - abonadoDesdeCorte(card, payments, st)));
+}
+
+/* ------------------------- Próximo pago y crédito ocupado por MSI ------------------------- */
+
+/** ¿La compra registrada es en realidad un cargo a meses (mismo monto y fecha cercana a un MSI de la tarjeta)? */
+export function esCompraMsi(t: Transaction, msis: Msi[]): boolean {
+  return msis.some(
+    (m) => m.cardId === t.metodo && Math.abs(m.montoOriginal - t.monto) < 1 && Math.abs(daysBetween(m.fechaOperacion, t.fecha)) <= 3,
+  );
+}
+
+/** Fecha límite de un corte, con los mismos días entre corte y límite que el último estado de cuenta. */
+export function limiteDeCorte(st: Statement, corte: ISODate): ISODate {
+  const l = addDays(corte, Math.max(1, daysBetween(st.fechaCorte, st.fechaLimite)));
+  const w = weekday(l);
+  return w === 0 || w === 6 ? nextBusinessDay(l) : l;
+}
+
+export interface ProximoPago {
+  corte: ISODate; // siguiente fecha de corte después del último estado de cuenta
+  limite: ISODate; // fecha límite estimada de ese corte
+  msi: { m: Msi; k: number }[]; // pagos de MSI que caen en ese corte (k = número de pago)
+  msiTotal: number;
+  compras: Transaction[]; // compras registradas antes del corte (sin contar las que son MSI)
+  comprasTotal: number;
+  total: number; // pago estimado para no generar intereses
+}
+
+/**
+ * Pago estimado del siguiente corte: las mensualidades de los MSI que caen en él más las compras que
+ * registraste con la tarjeta después del último corte y antes del siguiente. Las compras que son un MSI
+ * no se cuentan completas (ya van en sus mensualidades).
+ */
+export function proximoPago(card: Card, msis: Msi[], comprasPeriodo: Transaction[], st: Statement): ProximoPago {
+  const corte = addMonths(st.fechaCorte, 1);
+  const mias = msis.filter((m) => m.cardId === card.id);
+  const msi = mias.map((m) => ({ m, k: msiPagoEnCorte(m, corte) })).filter((x) => x.k > 0);
+  const compras = comprasPeriodo.filter((t) => t.fecha > st.fechaCorte && t.fecha <= corte && !esCompraMsi(t, mias));
+  const msiTotal = round2(msi.reduce((s, x) => s + x.m.pagoMensual, 0));
+  const comprasTotal = totalCompras(compras);
+  return { corte, limite: limiteDeCorte(st, corte), msi, msiTotal, compras, comprasTotal, total: round2(msiTotal + comprasTotal) };
+}
+
+export interface CreditoMsi {
+  total: number; // lo que suman todas las mensualidades de los MSI vigentes
+  ocupado: number; // lo que aún falta pagar: crédito que siguen ocupando
+  liberado: number; // lo ya pagado: crédito que ya se liberó
+  liberaProximo: number; // lo que se libera al pagar el siguiente corte
+  activos: number;
+}
+
+/**
+ * Cuánto crédito ocupan los MSI de una tarjeta y cuánto ya se liberó, según el último corte (lo cobrado
+ * hasta ese corte cuenta como pagado). Los MSI ya liquidados no entran.
+ */
+export function creditoMsi(msis: Msi[], refCorte: ISODate): CreditoMsi {
+  const vigentes = msis.map((m) => ({ m, i: msiInfo(m, refCorte) })).filter((x) => !x.i.liquidado);
+  const total = round2(vigentes.reduce((s, x) => s + x.m.pagoMensual * x.m.totalPagos, 0));
+  const ocupado = round2(vigentes.reduce((s, x) => s + x.i.saldoPendiente, 0));
+  const liberaProximo = round2(vigentes.filter((x) => msiPagoEnCorte(x.m, addMonths(refCorte, 1)) > 0).reduce((s, x) => s + x.m.pagoMensual, 0));
+  return { total, ocupado, liberado: round2(total - ocupado), liberaProximo, activos: vigentes.length };
 }

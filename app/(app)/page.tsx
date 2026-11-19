@@ -16,7 +16,7 @@ import { AnimatedNumber } from "@/components/motion";
 import { Badge, Btn, Card, Empty, PageHeader, Section, Skeleton, Stat, cx } from "@/components/ui";
 import { buildAlerts } from "@/lib/alerts";
 import { addMonthKey, daysBetween, fdate, fmonth, fshort, monthKey } from "@/lib/dates";
-import { abonadoDesdeCorte, deudaActual, latestStatement, projectCuts } from "@/lib/finance";
+import { abonadoDesdeCorte, deudaActual, latestStatement, projectCuts, proximoPago } from "@/lib/finance";
 import { loanSummary } from "@/lib/loan";
 import { mxn } from "@/lib/money";
 import { buildPlan } from "@/lib/plan";
@@ -84,7 +84,9 @@ export default function Resumen() {
   // Lo que vence cada mes en tarjetas
   const vence = new Map<string, number>();
   for (const c of creditos(db.cards)) {
-    for (const r of projectCuts(c, db.msi, db.plan?.cardId === c.id ? db.plan.comprasEstimadas : 0, 7)) {
+    const stc = latestStatement(c);
+    const prox = stc ? proximoPago(c, db.msi, compras?.[c.id]?.lista ?? [], stc).comprasTotal : 0;
+    for (const r of projectCuts(c, db.msi, db.plan?.cardId === c.id ? db.plan.comprasEstimadas : 0, 7, prox)) {
       const k = monthKey(r.limite);
       vence.set(k, (vence.get(k) ?? 0) + r.total);
     }
@@ -93,7 +95,8 @@ export default function Resumen() {
 
   // Deuda proyectada con el plan
   const plan = db.plan && db.cards.find((c) => c.id === db.plan!.cardId);
-  const planRes = plan && db.plan ? buildPlan(db.plan, plan, db.msi, db.payments, today) : null;
+  const stPlan = plan ? latestStatement(plan) : null;
+  const planRes = plan && db.plan ? buildPlan(db.plan, plan, db.msi, db.payments, today, stPlan ? proximoPago(plan, db.msi, compras?.[plan.id]?.lista ?? [], stPlan).comprasTotal : 0) : null;
   let deudaSerie: { v: number[]; l: string[] } | null = null;
   if (planRes?.weeks.length) {
     const fin = planRes.liquidacion ? planRes.weeks.indexOf(planRes.liquidacion) + 1 : planRes.weeks.length;

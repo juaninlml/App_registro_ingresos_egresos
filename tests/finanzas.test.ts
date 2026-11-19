@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { movimientosCSV } from "../lib/csv";
 import { addMonths, monthsDiff, nextBusinessDay } from "../lib/dates";
-import { abonadoDesdeCorte, comprasDesdeCorte, deudaActual, msiInfo, msiPagoEnCorte, totalCompras } from "../lib/finance";
+import { abonadoDesdeCorte, comprasDesdeCorte, creditoMsi, deudaActual, esCompraMsi, msiInfo, msiPagoEnCorte, projectCuts, proximoPago, totalCompras } from "../lib/finance";
 import { loanSchedule, pagoCalculado } from "../lib/loan";
 import { normalizar } from "../lib/recovery";
 import type { Card, Loan, Msi, Payment, Transaction } from "../lib/types";
@@ -105,5 +105,48 @@ describe("códigos de recuperación", () => {
     assert.equal(normalizar("ABCD-2345"), null);
     assert.equal(normalizar("ABCDE-2345O"), null); // la O se confunde con 0 y no existe en el alfabeto
     assert.equal(normalizar(12345), null);
+  });
+});
+
+describe("próximo pago y crédito ocupado por MSI", () => {
+  const laptop: Msi = { id: "m1", cardId: "c1", descripcion: "Laptop", fechaOperacion: "2026-06-10", montoOriginal: 24000, pagoMensual: 2000, totalPagos: 12, primerCorte: "2026-07-05" };
+  const tele: Msi = { id: "m2", cardId: "c1", descripcion: "Pantalla", fechaOperacion: "2026-11-08", montoOriginal: 6000, pagoMensual: 1000, totalPagos: 6, primerCorte: "2026-12-05" };
+  const viejo: Msi = { id: "m3", cardId: "c1", descripcion: "Celular", fechaOperacion: "2025-01-10", montoOriginal: 3000, pagoMensual: 1000, totalPagos: 3, primerCorte: "2025-02-05" };
+  const otraTarjeta: Msi = { ...laptop, id: "m4", cardId: "c9" };
+  const compras: Transaction[] = [
+    { id: "a", fecha: "2026-11-07", tipo: "gasto", monto: 500, categoria: "Súper", metodo: "c1" },
+    { id: "b", fecha: "2026-11-08", tipo: "gasto", monto: 6000, categoria: "Hogar", metodo: "c1" }, // es la pantalla a MSI
+    { id: "c", fecha: "2026-12-07", tipo: "gasto", monto: 300, categoria: "Súper", metodo: "c1" }, // después del corte
+  ];
+
+  it("reconoce la compra que en realidad es un MSI", () => {
+    assert.equal(esCompraMsi(compras[1], [laptop, tele]), true);
+    assert.equal(esCompraMsi(compras[0], [laptop, tele]), false);
+  });
+
+  it("el próximo pago suma las mensualidades del corte y las compras antes del corte", () => {
+    const p = proximoPago(card, [laptop, tele, viejo, otraTarjeta], compras, st);
+    assert.equal(p.corte, "2026-12-05");
+    assert.equal(p.limite, "2026-12-25"); // mismos 20 días que el último estado de cuenta
+    assert.deepEqual(p.msi.map((x) => [x.m.id, x.k]), [["m1", 6], ["m2", 1]]);
+    assert.equal(p.msiTotal, 3000);
+    assert.deepEqual(p.compras.map((t) => t.id), ["a"]); // sin la pantalla (ya va en MSI) ni la compra posterior al corte
+    assert.equal(p.total, 3500);
+  });
+
+  it("calcula el crédito que ocupan los MSI y el ya liberado", () => {
+    const c = creditoMsi([laptop, tele, viejo], "2026-11-05");
+    assert.equal(c.activos, 2); // el celular ya se liquidó
+    assert.equal(c.total, 30000); // 24,000 + 6,000
+    assert.equal(c.ocupado, 20000); // laptop: 7 × 2,000 · pantalla: 6 × 1,000
+    assert.equal(c.liberado, 10000); // 5 mensualidades de la laptop ya cobradas
+    assert.equal(c.liberaProximo, 3000);
+  });
+
+  it("la proyección del siguiente corte usa lo ya comprado si supera el estimado", () => {
+    const filas = projectCuts(card, [laptop], 200, 3, 500);
+    assert.equal(filas[1].compras, 500);
+    assert.equal(filas[1].total, 2500);
+    assert.equal(filas[2].compras, 200); // los cortes siguientes siguen con el estimado
   });
 });

@@ -8,7 +8,7 @@ import { IconCerrar } from "@/components/icons";
 import { Badge, Btn, Card, Empty, Field, IconBtn, Input, NumInput, PageHeader, Section, Stat, TableWrap, cx, td, th } from "@/components/ui";
 import { fdate, fshort, weekday } from "@/lib/dates";
 import { creditos } from "@/lib/cuentas";
-import { deudaActual, latestStatement } from "@/lib/finance";
+import { deudaActual, latestStatement, proximoPago } from "@/lib/finance";
 import Link from "next/link";
 import { mxn } from "@/lib/money";
 import { buildPlan, conAbono, defaultPlan, proximoLunes, sugerencias } from "@/lib/plan";
@@ -37,14 +37,17 @@ export default function Plan() {
   }
 
   const plan: PlanConfig = db.plan && db.plan.cardId === card.id ? db.plan : defaultPlan(card);
-  const res = buildPlan(plan, card, db.msi, db.payments, today);
+  const st0 = latestStatement(card)!;
+  // compras ya registradas para el siguiente corte (sin las que son MSI)
+  const comprasProx = proximoPago(card, db.msi, compras?.[card.id]?.lista ?? [], st0).comprasTotal;
+  const res = buildPlan(plan, card, db.msi, db.payments, today, comprasProx);
   const guardado = db.plan?.cardId === card.id;
   const setPlan = (p: PlanConfig) => save("plan", p);
   const st = latestStatement(card)!;
   const comprado = compras?.[card.id]?.total ?? 0;
   const deuda = deudaActual(card, db.payments, st, comprado);
-  const sug = sugerencias(plan, card, db.msi, db.payments, today, deuda);
-  const sim = custom === "" || Number(custom) <= 0 ? null : buildPlan(conAbono(plan, Number(custom), today), card, db.msi, db.payments, today);
+  const sug = sugerencias(plan, card, db.msi, db.payments, today, deuda, comprasProx);
+  const sim = custom === "" || Number(custom) <= 0 ? null : buildPlan(conAbono(plan, Number(custom), today), card, db.msi, db.payments, today, comprasProx);
   const simPend = sim ? sim.weeks.filter((w) => w.domingo >= today && w.pendiente > 0.005) : [];
   const aplicar = (m: number) => setPlan(conAbono(plan, m, today));
   const semActual = res.weeks.find((w) => w.lunes <= today && today <= w.domingo);

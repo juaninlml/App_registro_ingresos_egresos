@@ -53,10 +53,11 @@ function montoBase(plan: PlanConfig, lunes: ISODate): number {
  *  - Lo abonado se acumula como saldo a favor y, en la semana de cada fecha límite, se descuenta el pago del corte.
  *  - La deuda restante supone que todo lo abonado se aplica a reducir el capital (hay que pedírselo al banco).
  */
-export function buildPlan(plan: PlanConfig, card: Card, msis: Msi[], payments: Payment[], today: ISODate): PlanResult {
+/** `comprasProximo`: compras ya registradas para el siguiente corte (se usan si superan el estimado). */
+export function buildPlan(plan: PlanConfig, card: Card, msis: Msi[], payments: Payment[], today: ISODate, comprasProximo = 0): PlanResult {
   const st = latestStatement(card);
   if (!st) return { cuts: [], weeks: [], liquidacion: null, ultimoVencimientoMSI: null, remanenteFinal: 0, deudaInicial: 0 };
-  const cuts = projectCuts(card, msis, plan.comprasEstimadas);
+  const cuts = projectCuts(card, msis, plan.comprasEstimadas, undefined, comprasProximo);
   const ultimaLimite = cuts.length ? cuts[cuts.length - 1].limite : addDays(plan.inicio, 360);
   const nSemanas = Math.min(Math.max(Math.ceil(daysBetween(plan.inicio, ultimaLimite) / 7) + 1, 4), 156);
 
@@ -125,11 +126,11 @@ export interface Sugerencias {
   semanasLiquidar: number;
 }
 
-export function sugerencias(plan: PlanConfig, card: Card, msis: Msi[], payments: Payment[], today: ISODate, deuda: number): Sugerencias {
-  const base = buildPlan(plan, card, msis, payments, today);
+export function sugerencias(plan: PlanConfig, card: Card, msis: Msi[], payments: Payment[], today: ISODate, deuda: number, comprasProximo = 0): Sugerencias {
+  const base = buildPlan(plan, card, msis, payments, today, comprasProximo);
   if (!base.cuts.length) return { minimo: null, liquidar: null, semanasLiquidar: 0 };
   const futuras = (r: PlanResult) => r.weeks.filter((w) => w.domingo >= today);
-  const sinPendientes = (m: number) => futuras(buildPlan(conAbono(plan, m, today), card, msis, payments, today)).every((w) => w.pendiente <= 0.005);
+  const sinPendientes = (m: number) => futuras(buildPlan(conAbono(plan, m, today), card, msis, payments, today, comprasProximo)).every((w) => w.pendiente <= 0.005);
   const tope = Math.ceil(base.cuts.reduce((a, c) => a + c.total, 0)) + 1;
   let minimo: number | null = null;
   if (sinPendientes(tope)) {

@@ -10,8 +10,8 @@ import { ImportStatement } from "@/components/ImportStatement";
 import { AnimatedNumber, Segmented, useToast } from "@/components/motion";
 import { Badge, Btn, Card, Empty, Field, Input, Modal, NumInput, PageHeader, Section, Skeleton } from "@/components/ui";
 import { creditos } from "@/lib/cuentas";
-import { ahoraHM, daysBetween, fdate } from "@/lib/dates";
-import { abonadoDesdeCorte, deudaActual, latestStatement } from "@/lib/finance";
+import { ahoraHM, daysBetween, fdate, fshort } from "@/lib/dates";
+import { abonadoDesdeCorte, creditoMsi, deudaActual, latestStatement, proximoPago } from "@/lib/finance";
 import { mxn, uid } from "@/lib/money";
 import type { Card as CardT } from "@/lib/types";
 
@@ -104,6 +104,8 @@ export default function Tarjetas() {
               const falta = st ? Math.max(0, st.pagoNoIntereses - abonado) : 0;
               const d = st ? daysBetween(today, st.fechaLimite) : null;
               const comprado = compras?.[c.id]?.total ?? 0;
+              const prox = st ? proximoPago(c, db.msi, compras?.[c.id]?.lista ?? [], st) : null;
+              const cred = creditoMsi(db.msi.filter((m) => m.cardId === c.id), st?.fechaCorte ?? today);
               return (
                 <Link key={c.id} href={`/tarjetas/${c.id}`}>
                   <Card className="press h-full transition-colors duration-[var(--dur-fast)] hover:border-accent">
@@ -120,6 +122,18 @@ export default function Tarjetas() {
                         <div className="text-muted">Deuda actual</div>
                         <div className="text-lg font-semibold"><AnimatedNumber value={deudaActual(c, db.payments, st, comprado)} tone={{ up: "danger", down: "ok" }} /></div>
                         <div className="mt-1 text-xs text-muted">Falta {mxn(falta)} · límite {fdate(st.fechaLimite)}{comprado > 0 ? ` · ${mxn(comprado)} en compras nuevas` : ""}</div>
+                        {/* siguiente corte (MSI + compras antes del corte) y crédito que ocupan los MSI */}
+                        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-2 text-xs">
+                          <div>
+                            <div className="text-muted">Próximo pago · {fshort(prox!.corte)}</div>
+                            <div className="num text-sm font-semibold text-fg">{compras ? mxn(prox!.total) : "…"}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted">MSI ocupando</div>
+                            <div className="num text-sm font-semibold text-fg">{cred.activos ? mxn(cred.ocupado) : "—"}</div>
+                            {cred.activos > 0 && <div className="text-ok">{mxn(cred.liberado)} liberado</div>}
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <div className="mt-3 text-sm text-muted">Sin estados de cuenta</div>
