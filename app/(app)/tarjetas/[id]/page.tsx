@@ -44,7 +44,7 @@ export default function TarjetaDetalle() {
   const activos = infos.filter((x) => !x.i.liquidado);
   // siguiente corte: mensualidades de MSI + compras registradas antes del corte; y crédito que ocupan los MSI
   const proximo = st ? proximoPago(card, db.msi, misCompras?.lista ?? [], st) : null;
-  const credito = creditoMsi(msis, ref);
+  const credito = creditoMsi(msis, ref, card.limite);
   const pagos = db.payments.filter((p) => p.destino === "card" && p.targetId === card.id).sort((a, b) => b.fecha.localeCompare(a.fecha));
   const d = st ? daysBetween(today, st.fechaLimite) : null;
 
@@ -226,14 +226,14 @@ export default function TarjetaDetalle() {
           <Card className="mb-3">
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <div className="text-xs font-medium text-muted">Ocupando tu crédito</div>
+                <div className="text-xs font-medium text-muted">Ocupado por MSI</div>
                 <div className="mt-1 text-lg font-semibold sm:text-xl"><AnimatedNumber value={credito.ocupado} tone={{ up: "danger", down: "ok" }} /></div>
                 <div className="mt-0.5 text-xs text-muted">Falta por pagar</div>
               </div>
               <div>
                 <div className="text-xs font-medium text-muted">Ya liberado</div>
-                <div className="mt-1 text-lg font-semibold text-ok sm:text-xl"><AnimatedNumber value={credito.liberado} tone="ok" /></div>
-                <div className="mt-0.5 text-xs text-muted">de {mxn(credito.total)}</div>
+                <div className="mt-1 text-lg font-semibold text-ok sm:text-xl">{credito.liberado !== null ? <AnimatedNumber value={credito.liberado} tone="ok" /> : "—"}</div>
+                <div className="mt-0.5 text-xs text-muted">{credito.limite ? `de tu límite de ${mxn(credito.limite)}` : "Sin límite capturado"}</div>
               </div>
               <div>
                 <div className="text-xs font-medium text-muted">Se libera al pagar</div>
@@ -241,11 +241,27 @@ export default function TarjetaDetalle() {
                 <div className="mt-0.5 text-xs text-muted">en el corte del {fshort(addMonths(ref, 1))}</div>
               </div>
             </div>
-            <div className="mt-3"><Progress value={credito.liberado} max={credito.total} tone="ok" label="Crédito de MSI ya liberado" /></div>
-            <div className="mt-1 text-xs text-muted">
-              {Math.round((credito.liberado / (credito.total || 1)) * 100)}% liberado
-              {card.limite ? ` · los MSI ocupan ${Math.round((credito.ocupado / card.limite) * 100)}% de tu límite de ${mxn(card.limite)}` : ""}
-            </div>
+            {credito.limite ? (
+              <>
+                {/* el límite completo: la parte que ocupan los MSI y la que ya está liberada (siempre suman el límite) */}
+                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-ok/70" role="img" aria-label={`MSI ocupan ${Math.round((credito.ocupado / credito.limite) * 100)}% del límite; ${Math.round(((credito.liberado ?? 0) / credito.limite) * 100)}% liberado`}>
+                  <div className={`bar-fill h-full rounded-full ${credito.excede ? "bg-danger" : "bg-accent"}`} style={{ transform: `scaleX(${credito.ocupado / credito.limite})` }} />
+                </div>
+                <div className="mt-1 flex flex-wrap justify-between gap-x-3 text-xs">
+                  <span className="text-accent-text">{Math.round((credito.ocupado / credito.limite) * 100)}% ocupado por MSI</span>
+                  <span className="text-ok">{Math.round(((credito.liberado ?? 0) / credito.limite) * 100)}% liberado</span>
+                </div>
+                {credito.excede && (
+                  <p role="alert" className="mt-2 rounded-xl bg-warn-soft px-3 py-2 text-xs text-warn">Tus MSI pendientes suman más que el límite capturado ({mxn(credito.limite)}). Revisa el límite en «Editar» o las mensualidades de tus MSI.</p>
+                )}
+              </>
+            ) : (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
+                <span>Captura el límite de tu tarjeta para ver cuánto de tu crédito queda liberado.</span>
+                <Btn small onClick={() => setModal("editar")}>Capturar límite</Btn>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-muted">De tus MSI vigentes ({mxn(credito.total)}) ya pagaste {mxn(credito.pagado)}.</p>
           </Card>
         )}
         {!msis.length ? (

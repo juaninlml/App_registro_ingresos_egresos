@@ -134,13 +134,29 @@ describe("próximo pago y crédito ocupado por MSI", () => {
     assert.equal(p.total, 3500);
   });
 
-  it("calcula el crédito que ocupan los MSI y el ya liberado", () => {
-    const c = creditoMsi([laptop, tele, viejo], "2026-11-05");
+  it("reparte el límite entre lo que ocupan los MSI y lo liberado (siempre suma el límite)", () => {
+    const c = creditoMsi([laptop, tele, viejo], "2026-11-05", 60000);
     assert.equal(c.activos, 2); // el celular ya se liquidó
     assert.equal(c.total, 30000); // 24,000 + 6,000
+    assert.equal(c.pagado, 10000); // 5 mensualidades de la laptop ya cobradas
     assert.equal(c.ocupado, 20000); // laptop: 7 × 2,000 · pantalla: 6 × 1,000
-    assert.equal(c.liberado, 10000); // 5 mensualidades de la laptop ya cobradas
+    assert.equal(c.liberado, 40000); // 60,000 − 20,000
+    assert.equal(c.ocupado + (c.liberado ?? 0), 60000);
     assert.equal(c.liberaProximo, 3000);
+    assert.equal(c.excede, false);
+  });
+
+  it("lo liberado nunca supera el límite ni queda negativo aunque los MSI pasen del límite", () => {
+    const c = creditoMsi([laptop, tele], "2026-11-05", 15000);
+    assert.equal(c.ocupado, 15000); // se topa en el límite
+    assert.equal(c.liberado, 0);
+    assert.equal(c.excede, true);
+  });
+
+  it("sin límite capturado no inventa lo liberado", () => {
+    const c = creditoMsi([laptop], "2026-11-05");
+    assert.equal(c.liberado, null);
+    assert.equal(c.ocupado, 14000);
   });
 
   it("la proyección del siguiente corte usa lo ya comprado si supera el estimado", () => {

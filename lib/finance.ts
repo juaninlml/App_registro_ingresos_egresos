@@ -183,20 +183,38 @@ export function proximoPago(card: Card, msis: Msi[], comprasPeriodo: Transaction
 
 export interface CreditoMsi {
   total: number; // lo que suman todas las mensualidades de los MSI vigentes
-  ocupado: number; // lo que aún falta pagar: crédito que siguen ocupando
-  liberado: number; // lo ya pagado: crédito que ya se liberó
+  pagado: number; // lo que ya pagaste de esos MSI
+  limite: number | null; // límite de crédito de la tarjeta (si lo capturaste)
+  /** Parte del límite que ocupan los MSI (lo que falta por pagar). Nunca pasa del límite. */
+  ocupado: number;
+  /** Parte del límite que NO ocupan los MSI: ocupado + liberado = límite. Sin límite capturado es null. */
+  liberado: number | null;
+  /** Los MSI pendientes suman más que el límite capturado (revisa el límite). */
+  excede: boolean;
   liberaProximo: number; // lo que se libera al pagar el siguiente corte
   activos: number;
 }
 
 /**
- * Cuánto crédito ocupan los MSI de una tarjeta y cuánto ya se liberó, según el último corte (lo cobrado
- * hasta ese corte cuenta como pagado). Los MSI ya liquidados no entran.
+ * Cuánto de tu límite de crédito ocupan los MSI y cuánto queda liberado, según el último corte (lo
+ * cobrado hasta ese corte cuenta como pagado). Siempre suma exactamente el límite. Los MSI ya
+ * liquidados no entran.
  */
-export function creditoMsi(msis: Msi[], refCorte: ISODate): CreditoMsi {
+export function creditoMsi(msis: Msi[], refCorte: ISODate, limite?: number): CreditoMsi {
   const vigentes = msis.map((m) => ({ m, i: msiInfo(m, refCorte) })).filter((x) => !x.i.liquidado);
   const total = round2(vigentes.reduce((s, x) => s + x.m.pagoMensual * x.m.totalPagos, 0));
-  const ocupado = round2(vigentes.reduce((s, x) => s + x.i.saldoPendiente, 0));
-  const liberaProximo = round2(vigentes.filter((x) => msiPagoEnCorte(x.m, addMonths(refCorte, 1)) > 0).reduce((s, x) => s + x.m.pagoMensual, 0));
-  return { total, ocupado, liberado: round2(total - ocupado), liberaProximo, activos: vigentes.length };
+  const pendiente = round2(vigentes.reduce((s, x) => s + x.i.saldoPendiente, 0));
+  const lim = limite && limite > 0 ? limite : null;
+  const ocupado = lim === null ? pendiente : round2(Math.min(pendiente, lim));
+  const proximo = round2(vigentes.filter((x) => msiPagoEnCorte(x.m, addMonths(refCorte, 1)) > 0).reduce((s, x) => s + x.m.pagoMensual, 0));
+  return {
+    total,
+    pagado: round2(total - pendiente),
+    limite: lim,
+    ocupado,
+    liberado: lim === null ? null : round2(lim - ocupado),
+    excede: lim !== null && pendiente > lim,
+    liberaProximo: round2(Math.min(proximo, ocupado)),
+    activos: vigentes.length,
+  };
 }

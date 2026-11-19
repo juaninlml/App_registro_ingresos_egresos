@@ -105,7 +105,7 @@ export default function Tarjetas() {
               const d = st ? daysBetween(today, st.fechaLimite) : null;
               const comprado = compras?.[c.id]?.total ?? 0;
               const prox = st ? proximoPago(c, db.msi, compras?.[c.id]?.lista ?? [], st) : null;
-              const cred = creditoMsi(db.msi.filter((m) => m.cardId === c.id), st?.fechaCorte ?? today);
+              const cred = creditoMsi(db.msi.filter((m) => m.cardId === c.id), st?.fechaCorte ?? today, c.limite);
               return (
                 <Link key={c.id} href={`/tarjetas/${c.id}`}>
                   <Card className="press h-full transition-colors duration-[var(--dur-fast)] hover:border-accent">
@@ -131,7 +131,7 @@ export default function Tarjetas() {
                           <div>
                             <div className="text-muted">MSI ocupando</div>
                             <div className="num text-sm font-semibold text-fg">{cred.activos ? mxn(cred.ocupado) : "—"}</div>
-                            {cred.activos > 0 && <div className="text-ok">{mxn(cred.liberado)} liberado</div>}
+                            {cred.activos > 0 && cred.liberado !== null && <div className="text-ok">{mxn(cred.liberado)} liberado de {mxn(cred.limite!)}</div>}
                           </div>
                         </div>
                       </div>
